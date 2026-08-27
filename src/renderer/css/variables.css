@@ -1,0 +1,84 @@
+:root {
+  --color-0-l: 6.275%;
+  --color-1-l: 10.196%;
+  --color-2-l: 14.902%;
+  --color-3-l: 18.824%;
+  --color-4-l: 60%;
+  --color-5-l: 87.843%;
+  --color-6-l: 100%;
+  
+  --color-0: hsl(0 0% var(--color-0-l));
+  --color-1: hsl(0 0% var(--color-1-l));
+  --color-2: hsl(0 0% var(--color-2-l));
+  --color-3: hsl(0 0% var(--color-3-l));
+  --color-4: hsl(0 0% var(--color-4-l));
+  --color-5: hsl(0 0% var(--color-5-l));
+  --color-6: hsl(0 0% var(--color-6-l));
+
+  --color-0-t-md: hsl(0 0% var(--color-0-l) / 0.50);
+
+  --color-green-h: 155;
+  --color-green-s: 62%;
+  --color-green-l: 50%;
+  --color-green: hsl(var(--color-green-h) var(--color-green-s) var(--color-green-l));
+  --color-green-soft: hsl(var(--color-green-h) var(--color-green-s) var(--color-green-l) / 0.1);
+  --color-green-border: hsl(var(--color-green-h) var(--color-green-s) var(--color-green-l) / 0.25);
+
+  --color-red-h: 355;
+  --color-red-s: 68%;
+  --color-red-l: 58.824%;
+  --color-red: hsl(var(--color-red-h) var(--color-red-s) var(--color-red-l));
+  --color-red-soft: hsl(var(--color-red-h) var(--color-red-s) var(--color-red-l) / 0.1);
+  --color-red-border: hsl(var(--color-red-h) var(--color-red-s) var(--color-red-l) / 0.25);
+
+  --font-serif: 'EB Garamond';
+  --font-sans: 'Orkney';
+  --font-mono: 'JetBrains Mono';
+  
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-full: 99px;
+
+  --border-width: 1px;
+  --border: var(--border-width) solid var(--color-3);
+  --border-dashed: var(--border-width) dashed var(--color-3);
+
+  --shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+
+  --blur-sm: blur(2px);
+  --blur-lg: blur(16px);
+
+  --color-backdrop: rgba(0, 0, 0, 0.4);
+
+  --modal-sm: 400px;
+  --modal-md: 500px;
+  --modal-lg: 800px;
+  --modal-xl-margin: 42px;
+}
+
+
+body.light-mode {
+  --color-0-l: 100%;
+  --color-1-l: 94.902%;
+  --color-2-l: 90.196%;
+  --color-3-l: 87.059%;
+  --color-4-l: 45.098%;
+  --color-5-l: 20%;
+  --color-6-l: 12.941%;
+
+  --color-0: hsl(0 0% var(--color-0-l));
+  --color-1: hsl(0 0% var(--color-1-l));
+  --color-2: hsl(0 0% var(--color-2-l));
+  --color-3: hsl(0 0% var(--color-3-l));
+  --color-4: hsl(0 0% var(--color-4-l));
+  --color-5: hsl(0 0% var(--color-5-l));
+  --color-6: hsl(0 0% var(--color-6-l));
+
+  --color-0-t-md: hsl(0 0% var(--color-0-l) / 0.1);
+
+  --border: var(--border-width) solid var(--color-3);
+  --border-dashed: var(--border-width) dashed var(--color-3);
+
+  --shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+}

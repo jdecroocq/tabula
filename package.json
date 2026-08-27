@@ -1,0 +1,40 @@
+{
+  "name": "tabula",
+  "version": "1.0.0",
+  "description": "Livre de comptes personnel.",
+  "homepage": "https://github.com/jdecroocq/tabula",
+  "main": "src/main/main.js",
+  "author": {
+    "name": "Jean Decroocq",
+    "email": "jdecroocq.dev@gmail.com"
+  },
+  "license": "MIT",
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "dist": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "fr.tabula.app",
+    "productName": "Tabula",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "icon": "src/main/assets/icon.png",
+      "category": "Office;Finance;",
+      "maintainer": "Jean Decroocq <jdecroocq.dev@gmail.com>"
+    }
+  }
+}

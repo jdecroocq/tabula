@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tabula</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-viewport">
+
+  <header class="app-header">
+    <div class="header-brand">
+      <h1 class="brand-title font-serif">
+        Tabula
+        <span class="app-version text-muted" id="app-version"></span>
+      </h1>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn" id="nav-analytics-btn" title="Analyse financière">
+        <svg class="icon"><use href="icons.svg#icon-analytics"></use></svg>
+        <span>Analyse</span>
+      </button>
+
+      <button class="btn" id="nav-export-btn" title="Exporter des rapports">
+        <svg class="icon"><use href="icons.svg#icon-file-export"></use></svg>
+        <span>Rapports</span>
+      </button>
+
+      <button class="btn" id="nav-settings-btn" title="Paramètres">
+        <svg class="icon"><use href="icons.svg#icon-settings"></use></svg>
+        <span>Paramètres</span>
+      </button>
+
+      <button class="btn btn-primary" id="open-new-op-btn">
+        <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
+        <span>Nouvelle opération</span>
+      </button>
+    </div>
+  </header>
+
+
+    <main class="main-layout">
+
+      <!-- Carrousel des soldes -->
+      <div class="carousel-card" id="balance-carousel-card">
+        <div class="carousel-viewport">
+          <div class="carousel-track" id="carousel-track"></div>
+        </div>
+        <div class="carousel-dots-wrapper">
+          <div class="carousel-dots" id="carousel-dots"></div>
+        </div>
+      </div>
+
+      <!-- Barre de recherche globale -->
+      <div class="search-bar">
+        <input type="text" id="search-input" class="input-text" placeholder="Rechercher par libellé, date, catégorie, montant...">
+        <svg class="icon search-icon"><use href="icons.svg#icon-search"></use></svg>
+      </div>
+
+      <!-- Tableau des opérations -->
+      <div>
+        <div class="table-card" id="transactions-table-card" style="display: none;">
+          <table class="tabula-table">
+            <thead>
+              <tr>
+                <th class="col-date">Date</th>
+                <th>Description</th>
+                <th class="col-category">Catégorie</th>
+                <th class="col-account">Compte</th>
+                <th class="col-amount">Montant</th>
+              </tr>
+            </thead>
+            <tbody id="transactions-body"></tbody>
+          </table>
+
+          <div id="load-more-container" class="load-more-container">
+            <button type="button" class="btn btn-max-width" id="load-more-btn">Afficher plus d'opérations</button>
+          </div>
+        </div>
+
+        <!-- État vide -->
+        <div id="empty-state" class="empty-state-card">
+          <h3 class="font-serif empty-state-title" id="empty-state-title"></h3>
+          <p class="text-muted empty-state-desc" id="empty-state-desc"></p>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- =========================================
+       MODALE DES PARAMÈTRES
+       ========================================= -->
+  <div class="modal-backdrop" id="settings-modal">
+    <div class="modal-card modal-settings">
+      <div class="settings-layout">
+        
+        <div class="settings-sidebar">
+          <div class="settings-header">
+            <h2>Paramètres</h2>
+          </div>
+          <div class="settings-tabs">
+            <button class="settings-tab active" data-target="tab-accounts">
+              <svg class="icon"><use href="icons.svg#icon-wallet"></use></svg>
+              <span>Comptes</span>
+            </button>
+            <button class="settings-tab" data-target="tab-categories">
+              <svg class="icon"><use href="icons.svg#icon-category"></use></svg>
+              <span>Catégories</span>
+            </button>
+            <button class="settings-tab" data-target="tab-recurrence">
+              <svg class="icon"><use href="icons.svg#icon-event-repeat"></use></svg>
+              <span>Récurrences</span>
+            </button>
+            <button class="settings-tab" data-target="tab-rules">
+              <svg class="icon"><use href="icons.svg#icon-arrow-split"></use></svg>
+              <span>Règles</span>
+            </button>
+            <button class="settings-tab" data-target="tab-backup">
+              <svg class="icon"><use href="icons.svg#icon-database"></use></svg>
+              <span>Données</span>
+            </button>
+            <button class="settings-tab" data-target="tab-interface">
+              <svg class="icon"><use href="icons.svg#icon-style"></use></svg>
+              <span>Interface</span>
+            </button>
+            <button class="settings-tab" data-target="tab-update">
+              <svg class="icon"><use href="icons.svg#icon-update"></use></svg>
+              <span>Mise à jour</span>
+            </button>
+            <button class="settings-tab external-link" data-url="https://github.com/jdecroocq/tabula" title="Ouvrir le dépôt GitHub">
+              <svg class="icon"><use href="icons.svg#icon-dev"></use></svg>
+              <span>GitHub</span>
+              <svg class="icon icon-outward"><use href="icons.svg#icon-outward"></use></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-content">
+
+          <!-- Onglet comptes -->
+          <div class="settings-pane active" id="tab-accounts">
+            <div class="pane-header">
+              <h3>Comptes bancaires</h3>
+              <p class="text-muted">Gérez vos comptes et leurs soldes initiaux.</p>
+            </div>
+            <div class="settings-list" id="settings-accounts-list"></div>
+            <button type="button" class="btn btn-dashed" id="settings-add-account-btn">
+              <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
+              <span>Ajouter un compte</span>
+            </button>
+          </div>
+
+          <!-- Onglet catégories -->
+          <div class="settings-pane" id="tab-categories">
+            <div class="pane-header">
+              <h3>Catégories d'opérations</h3>
+              <p class="text-muted">Créez ou personnalisez vos catégories.</p>
+            </div>
+            <div class="settings-list" id="settings-categories-list"></div>
+            <button type="button" class="btn btn-dashed" id="settings-add-category-btn">
+              <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
+              <span>Ajouter une catégorie</span>
+            </button>
+          </div>
+
+          <!-- Onglet récurrences -->
+          <div class="settings-pane" id="tab-recurrence">
+            <div class="pane-header">
+              <h3>Opérations récurrentes</h3>
+              <p class="text-muted">Automatisez la saisie de vos charges fixes et abonnements.</p>
+            </div>
+            <div class="settings-wip-card">
+              <svg class="icon"><use href="icons.svg#icon-dev"></use></svg>
+              <div class="wip-title">En cours de développement</div>
+              <p class="text-muted">La planification automatique des écritures sera intégrée dans une prochaine mise à jour.</p>
+            </div>
+          </div>
+
+          <!-- Onglet règles -->
+          <div class="settings-pane" id="tab-rules">
+            <div class="pane-header">
+              <h3>Règles d'automatisation</h3>
+              <p class="text-muted">Pré-remplissez vos formulaires selon des mots-clés de description.</p>
+            </div>
+            <div class="settings-wip-card">
+              <svg class="icon"><use href="icons.svg#icon-dev"></use></svg>
+              <div class="wip-title">En cours de développement</div>
+              <p class="text-muted">L'auto-complétion intelligente sera disponible prochainement.</p>
+            </div>
+          </div>
+
+          <!-- Onglet données -->
+          <div class="settings-pane" id="tab-backup">
+            <div class="pane-header">
+              <h3>Gestion des données</h3>
+              <p class="text-muted">Sauvegardez, restaurez ou réinitialisez votre base de données locale.</p>
+            </div>
+            <div class="settings-cards-group">
+              <div class="settings-card">
+                <div class="settings-card-info">
+                  <span class="settings-card-title">Sauvegarde externe</span>
+                  <span class="text-muted settings-card-desc">Enregistre toutes vos écritures et comptes dans un fichier JSON.</span>
+                </div>
+                <button type="button" class="btn" id="btn-export-backup">Exporter</button>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-info">
+                  <span class="settings-card-title">Restauration</span>
+                  <span class="text-muted settings-card-desc">Écrase les données actuelles avec un fichier de sauvegarde.</span>
+                </div>
+                <button type="button" class="btn" id="btn-import-backup">Importer</button>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-info">
+                  <span class="settings-card-title">Paramètres d'usine</span>
+                  <span class="text-muted settings-card-desc">Supprime toutes les écritures et réinitialise les comptes par défaut.</span>
+                </div>
+                <button type="button" class="btn" id="btn-reset-db">Réinitialiser</button>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-info">
+                  <span class="settings-card-title">Emplacement</span>
+                  <span class="text-muted settings-card-desc">Ouvre le dossier système contenant le fichier data.json.</span>
+                </div>
+                <button type="button" class="btn" id="btn-open-folder">Ouvrir</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Onglet interface -->
+          <div class="settings-pane" id="tab-interface">
+            <div class="pane-header">
+              <h3>Interface</h3>
+              <p class="text-muted">Personnalisez l'affichage du logiciel.</p>
+            </div>
+            <div class="input-group theme-select-group">
+              <label>Thème visuel</label>
+              <div class="custom-select" id="settings-theme-select">
+                <button type="button" class="select-trigger">
+                  <span class="select-label">Système (Défaut)</span>
+                  <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+                </button>
+                <div class="select-menu">
+                  <div class="select-option selected" data-value="system">Système</div>
+                  <div class="select-option" data-value="dark">Sombre</div>
+                  <div class="select-option" data-value="light">Clair</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Onglet mise à jour -->
+          <div class="settings-pane" id="tab-update">
+            <div class="pane-header">
+              <h3>Gestionnaire de mise à jour</h3>
+              <p class="text-muted">Vérifiez l'état de votre version et installez les dernières améliorations.</p>
+            </div>
+            <div class="settings-wip-card">
+              <svg class="icon"><use href="icons.svg#icon-dev"></use></svg>
+              <div class="wip-title">En cours de développement</div>
+              <p class="text-muted">Le système de détection et de téléchargement des nouvelles versions de Tabula sera disponible prochainement. En attendant, vous pouvez consulter les dernières publications directement sur le dépôt GitHub.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="settings-footer">
+        <button type="button" class="btn" id="cancel-settings-btn">Annuler</button>
+        <button type="button" class="btn btn-primary" id="save-settings-btn">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menu contextuel (clic droit) -->
+  <div class="context-menu" id="row-context-menu">
+    <div class="context-menu-item action-edit">
+      <svg class="icon"><use href="icons.svg#icon-edit"></use></svg>
+      <span>Modifier</span>
+    </div>
+    <div class="context-menu-item action-duplicate">
+      <svg class="icon"><use href="icons.svg#icon-copy"></use></svg>
+      <span>Dupliquer</span>
+    </div>
+    <div class="context-menu-item danger action-delete">
+      <svg class="icon"><use href="icons.svg#icon-trash"></use></svg>
+      <span>Supprimer</span>
+    </div>
+  </div>
+
+  <!-- Modale d'opération -->
+  <div class="modal-backdrop" id="operation-modal">
+    <div class="modal-card modal-form">
+      <h2>Nouvelle opération</h2>
+      <form id="operation-form" class="modal-body" novalidate>
+        <div class="type-segmented-control">
+          <button type="button" class="type-btn active" data-type="expense">Dépense</button>
+          <button type="button" class="type-btn" data-type="income">Recette</button>
+          <button type="button" class="type-btn" data-type="transfer">Virement</button>
+        </div>
+        <div class="form-row">
+          <div class="input-group">
+            <label>Montant</label>
+            <div class="amount-input-wrapper">
+              <input type="text" id="op-amount" class="input-text" placeholder="0,00" autocomplete="off">
+              <span class="currency-symbol">€</span>
+            </div>
+          </div>
+          <div class="input-group">
+            <label>Date</label>
+            <input type="date" id="op-date" class="input-date">
+          </div>
+        </div>
+        <div class="input-group" id="group-payee">
+          <label>Description</label>
+          <input type="text" id="op-payee" class="input-text" placeholder="Motif, tiers, période..." autocomplete="off">
+        </div>
+        <div class="form-row">
+          <div class="input-group">
+            <label id="label-account-source">Compte</label>
+            <div class="custom-select" id="op-account">
+              <button type="button" class="select-trigger">
+                <span class="select-label">Sélectionner...</span>
+                <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+              </button>
+              <div class="select-menu"></div>
+            </div>
+          </div>
+          <div class="input-group" id="group-to-account">
+            <label>Compte destinataire</label>
+            <div class="custom-select" id="op-to-account">
+              <button type="button" class="select-trigger">
+                <span class="select-label">Sélectionner...</span>
+                <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+              </button>
+              <div class="select-menu"></div>
+            </div>
+          </div>
+          <div class="input-group" id="group-category">
+            <label>Catégorie</label>
+            <div class="custom-select" id="op-category">
+              <button type="button" class="select-trigger">
+                <span class="select-label">Sélectionner...</span>
+                <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+              </button>
+              <div class="select-menu"></div>
+            </div>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Commentaire</label>
+          <input type="text" id="op-note" class="input-text" placeholder="Détails supplémentaires..." autocomplete="off">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" id="cancel-modal-btn">Annuler</button>
+          <button type="submit" class="btn btn-primary" id="save-op-btn">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modale suppression d'une opération -->
+  <div class="modal-backdrop" id="delete-modal">
+    <div class="modal-card modal-sm">
+      <h2>Supprimer l'opération</h2>
+      <div class="modal-body">
+        <p class="text-muted">Cette action est irréversible.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="cancel-delete-btn">Annuler</button>
+        <button type="button" class="btn btn-danger" id="confirm-delete-btn">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale suppression dans les paramètres -->
+  <div class="modal-backdrop" id="settings-delete-modal">
+    <div class="modal-card modal-sm">
+      <h2>Attention</h2>
+      <div class="modal-body">
+        <p class="text-muted" id="settings-delete-desc"></p>
+        <p class="text-muted delete-impact-text" id="settings-delete-count"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="cancel-settings-delete-btn">Annuler</button>
+        <button type="button" class="btn btn-danger" id="confirm-settings-delete-btn">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale avertissement import -->
+  <div class="modal-backdrop" id="import-warning-modal">
+    <div class="modal-card modal-sm">
+      <h2>Attention</h2>
+      <div class="modal-body">
+        <p class="text-muted">Importer une sauvegarde va écraser définitivement toutes vos données actuelles. Assurez-vous d'avoir exporté une copie récente avant de continuer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="cancel-import-warning-btn">Annuler</button>
+        <button type="button" class="btn btn-danger" id="confirm-import-warning-btn">Importer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale avertissement reset -->
+  <div class="modal-backdrop" id="reset-warning-modal">
+    <div class="modal-card modal-sm">
+      <h2>Attention</h2>
+      <div class="modal-body">
+        <p class="text-muted">Cette action supprimera définitivement toutes vos opérations ainsi que les comptes et catégories personnalisés. La base de données sera restaurée avec la configuration d'usine par défaut.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" id="cancel-reset-warning-btn">Annuler</button>
+        <button type="button" class="btn btn-danger" id="confirm-reset-warning-btn">Tout effacer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale en construction -->
+  <div class="modal-backdrop" id="wip-modal">
+    <div class="modal-card modal-sm">
+      <h2>En cours de développement</h2>
+      <p class="text-muted">Ce module sera disponible dans une prochaine mise à jour.</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="close-wip-btn">Compris</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
