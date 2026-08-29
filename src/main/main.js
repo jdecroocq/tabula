@@ -38,6 +38,34 @@ app.whenReady().then(() => {
   ipcMain.handle('db:update-accounts', async (e, accs) => store.updateAccounts(accs));
   ipcMain.handle('db:open-data-folder', () => shell.showItemInFolder(store.getDataFilePath()));
   
+  ipcMain.handle('db:get-data-path', () => {
+    return store.getDataFilePath();
+  });
+
+  ipcMain.handle('db:set-data-path', async (e, customPath) => {
+    return store.setDataPath(customPath);
+  });
+
+  let isDialogOpen = false;
+  ipcMain.handle('db:select-data-folder', async () => {
+    if (isDialogOpen) return null; // Bloque les ouvertures multiples si déjà ouvert
+    isDialogOpen = true;
+
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        title: 'Sélectionner le dossier pour la base de données',
+        properties: ['openDirectory', 'createDirectory']
+      });
+
+      if (!canceled && filePaths && filePaths[0]) {
+        return filePaths[0]; // Retourne uniquement le chemin sans l'enregistrer tout de suite
+      }
+      return null;
+    } finally {
+      isDialogOpen = false;
+    }
+  });
+  
   ipcMain.handle('db:reset-data', async () => {
     return store.resetToDefault();
   });
@@ -75,7 +103,6 @@ app.whenReady().then(() => {
     }
     return false;
   });
-
 
   ipcMain.handle('app:open-external', (e, url) => shell.openExternal(url));
 });

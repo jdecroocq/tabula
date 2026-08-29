@@ -13,4 +13,7 @@ contextBridge.exposeInMainWorld('tabula', {
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   resetData: () => ipcRenderer.invoke('db:reset-data'),
   openDataFolder: () => ipcRenderer.invoke('db:open-data-folder'),
+  getDataPath: () => ipcRenderer.invoke('db:get-data-path'),
+  setDataPath: (path) => ipcRenderer.invoke('db:set-data-path', path),
+  selectDataFolder: () => ipcRenderer.invoke('db:select-data-folder'),
 });

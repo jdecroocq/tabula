@@ -1010,6 +1010,10 @@ function openSettingsModal() {
   tempAccounts = JSON.parse(JSON.stringify(db.accounts));
   tempCategories = JSON.parse(JSON.stringify(db.categories));
   tempTheme = savedTheme;
+  tempDataPath = savedDataPath; // Mémorise le chemin initial
+
+  const pathInput = document.getElementById('db-path-input');
+  if (pathInput) pathInput.value = tempDataPath || '';
 
   renderSettingsAccounts();
   renderSettingsCategories();
@@ -1186,22 +1190,30 @@ document.getElementById('settings-add-category-btn').addEventListener('click', (
 });
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
-  if (!validateAccountsList() || !validateCategoriesList()) return;
+  // 1. Si l'emplacement a changé, on applique le nouveau chemin
+  if (tempDataPath && tempDataPath !== savedDataPath) {
+    const res = await window.tabula.setDataPath(tempDataPath);
+    if (res && res.success) {
+      savedDataPath = res.path;
+      if (res.created) {
+        document.getElementById('new-db-modal')?.classList.add('active');
+      }
+    }
+  } else {
+    // 2. Si l'emplacement n'a pas bougé, on enregistre les modifications de comptes/catégories
+    if (!validateAccountsList() || !validateCategoriesList()) return;
 
-  const finalAccounts = tempAccounts.map(a => ({ ...a, name: a.name.trim() }));
-  const finalCategories = tempCategories.map(c => ({ ...c, name: c.name.trim() }));
+    const finalAccounts = tempAccounts.map(a => ({ ...a, name: a.name.trim() }));
+    const finalCategories = tempCategories.map(c => ({ ...c, name: c.name.trim() }));
 
-  await window.tabula.updateAccounts(finalAccounts);
-  await window.tabula.updateCategories(finalCategories);
+    await window.tabula.updateAccounts(finalAccounts);
+    await window.tabula.updateCategories(finalCategories);
+  }
 
   savedTheme = tempTheme;
   localStorage.setItem('tabula-theme', savedTheme);
 
-  db = await window.tabula.getData();
-
-  renderBalanceCarousel();
-  renderTransactions();
-
+  await loadApp();
   settingsModal.classList.remove('active');
 });
 
@@ -1297,9 +1309,52 @@ document.getElementById('confirm-settings-delete-btn').addEventListener('click',
   }
 });
 
-// Ouvrir l'emplacement du fichier dans l'explorateur
-document.getElementById('btn-open-folder').addEventListener('click', () => {
+let savedDataPath = '';
+let tempDataPath = '';
+
+// Affichage et mémorisation du chemin actif
+async function refreshDataPathDisplay() {
+  const inputEl = document.getElementById('db-path-input');
+  if (window.tabula.getDataPath) {
+    savedDataPath = await window.tabula.getDataPath();
+    tempDataPath = savedDataPath;
+    if (inputEl) {
+      inputEl.value = savedDataPath || '';
+      inputEl.title = savedDataPath || '';
+    }
+  }
+}
+
+// Saisie manuelle : on met simplement à jour tempDataPath en attente d'enregistrement
+const dbPathInput = document.getElementById('db-path-input');
+dbPathInput?.addEventListener('input', () => {
+  tempDataPath = dbPathInput.value.trim();
+});
+dbPathInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    dbPathInput.blur();
+  }
+});
+
+// Bouton dossier : sélectionne le chemin et met à jour l'input (en attente d'enregistrement)
+document.getElementById('btn-browse-folder')?.addEventListener('click', async () => {
+  if (!window.tabula.selectDataFolder) return;
+  const selectedPath = await window.tabula.selectDataFolder();
+  if (selectedPath) {
+    tempDataPath = selectedPath;
+    if (dbPathInput) dbPathInput.value = selectedPath;
+  }
+});
+
+// Bouton Ouvrir l'emplacement actif dans l'OS
+document.getElementById('btn-open-folder')?.addEventListener('click', () => {
   window.tabula.openDataFolder();
+});
+
+// Bouton "Compris" de la modale
+document.getElementById('close-new-db-btn')?.addEventListener('click', () => {
+  document.getElementById('new-db-modal')?.classList.remove('active');
 });
 
 
@@ -1395,6 +1450,7 @@ document.addEventListener('keydown', (e) => {
       { id: 'import-warning-modal', closeFn: () => document.getElementById('import-warning-modal').classList.remove('active') },
       { id: 'delete-modal', closeFn: () => document.getElementById('delete-modal').classList.remove('active') },
       { id: 'wip-modal', closeFn: () => document.getElementById('wip-modal').classList.remove('active') },
+      { id: 'new-db-modal', closeFn: () => document.getElementById('new-db-modal').classList.remove('active') },
       { id: 'operation-modal', closeFn: closeOpModal },
       { id: 'settings-modal', closeFn: closeSettingsModal }
     ];
@@ -1463,6 +1519,8 @@ async function loadApp() {
     const version = await window.tabula.getVersion();
     document.getElementById('app-version').innerText = `v${version}`;
   }
+
+  await refreshDataPathDisplay();
 
   initCustomSelects();
   renderBalanceCarousel();

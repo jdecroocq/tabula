@@ -4,7 +4,59 @@ const path = require('path');
 const crypto = require('crypto');
 
 const userDataPath = app.getPath('userData');
-const dataFilePath = path.join(userDataPath, 'data.json');
+const configFilePath = path.join(userDataPath, 'config.json');
+const defaultDataFilePath = path.join(userDataPath, 'data.json');
+
+let currentDataFilePath = defaultDataFilePath;
+
+function loadStorageConfig() {
+  try {
+    if (fs.existsSync(configFilePath)) {
+      const config = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
+      if (config.dataPath && typeof config.dataPath === 'string') {
+        const folder = path.dirname(config.dataPath);
+        if (fs.existsSync(folder)) {
+          currentDataFilePath = config.dataPath;
+          return;
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Erreur lors de la lecture de config.json :", error);
+  }
+  currentDataFilePath = defaultDataFilePath;
+}
+
+function setDataPath(targetPath) {
+  try {
+    let cleanPath = (targetPath || '').trim();
+    if (!cleanPath) return { success: false, error: 'Chemin vide' };
+
+    let newFilePath = cleanPath.endsWith('.json') ? cleanPath : path.join(cleanPath, 'data.json');
+    let targetDir = path.dirname(newFilePath);
+
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    let isNewCreated = false;
+
+    // Si aucun fichier n'existe à l'endroit ciblé, on crée une nouvelle base vierge
+    if (!fs.existsSync(newFilePath)) {
+      const freshData = createDefaultData();
+      fs.writeFileSync(newFilePath, JSON.stringify(freshData, null, 2), 'utf-8');
+      isNewCreated = true;
+    }
+
+    currentDataFilePath = newFilePath;
+    fs.writeFileSync(configFilePath, JSON.stringify({ dataPath: currentDataFilePath }, null, 2), 'utf-8');
+
+    return { success: true, created: isNewCreated, path: currentDataFilePath };
+  } catch (error) {
+    console.error("Erreur lors de la définition du chemin :", error);
+    return { success: false, error: error.message };
+  }
+}
 
 function createDefaultData() {
   return {
@@ -38,15 +90,16 @@ function resetToDefault() {
 }
 
 function getDataFilePath() {
-  return dataFilePath;
+  return currentDataFilePath;
 }
 
 function writeData(data) {
   try {
-    if (!fs.existsSync(userDataPath)) {
-      fs.mkdirSync(userDataPath, { recursive: true });
+    const targetDir = path.dirname(currentDataFilePath);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
     }
-    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(currentDataFilePath, JSON.stringify(data, null, 2), 'utf-8');
     return true;
   } catch (error) {
     console.error("Erreur d'écriture :", error);
@@ -56,12 +109,12 @@ function writeData(data) {
 
 function readData() {
   try {
-    if (!fs.existsSync(dataFilePath)) {
+    if (!fs.existsSync(currentDataFilePath)) {
       const initial = createDefaultData();
       writeData(initial);
       return initial;
     }
-    const raw = fs.readFileSync(dataFilePath, 'utf-8');
+    const raw = fs.readFileSync(currentDataFilePath, 'utf-8');
     return JSON.parse(raw);
   } catch (error) {
     console.error("Erreur de lecture :", error);
@@ -71,6 +124,7 @@ function readData() {
 }
 
 function init() {
+  loadStorageConfig();
   return readData();
 }
 
@@ -161,10 +215,10 @@ module.exports = {
   writeData,
   resetToDefault,
   getDataFilePath,
+  setDataPath,
   addTransaction,
   updateTransaction,
   deleteTransaction,
   updateCategories,
   updateAccounts,
-  resetToDefault,
 };
