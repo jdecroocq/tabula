@@ -4,7 +4,67 @@ const path = require('path');
 const crypto = require('crypto');
 
 const userDataPath = app.getPath('userData');
-const dataFilePath = path.join(userDataPath, 'data.json');
+const configFilePath = path.join(userDataPath, 'config.json');
+const defaultDataFilePath = path.join(userDataPath, 'data.json');
+
+let currentDataFilePath = defaultDataFilePath;
+let missingCustomFilePath = null;
+
+function loadStorageConfig() {
+  missingCustomFilePath = null;
+  try {
+    if (fs.existsSync(configFilePath)) {
+      const config = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
+      const customPath = config.activeFilePath || config.dataPath;
+      if (customPath) {
+        if (fs.existsSync(customPath)) {
+          currentDataFilePath = customPath;
+          return;
+        } else {
+          missingCustomFilePath = customPath;
+          setActiveDataFilePath(defaultDataFilePath);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Erreur lors de la lecture de config.json :", error);
+  }
+  currentDataFilePath = defaultDataFilePath;
+}
+
+function getMissingFilePath() {
+  const missing = missingCustomFilePath;
+  missingCustomFilePath = null;
+  return missing;
+}
+
+function validateTabulaFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return { valid: false, error: 'not_found' };
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const data = JSON.parse(raw);
+    if (data && Array.isArray(data.accounts) && Array.isArray(data.categories) && Array.isArray(data.transactions)) {
+      return { valid: true, data };
+    }
+    return { valid: false, error: 'invalid_format' };
+  } catch (e) {
+    return { valid: false, error: 'parse_error' };
+  }
+}
+
+function setActiveDataFilePath(newFilePath) {
+  try {
+    const cleanPath = (newFilePath || '').trim();
+    if (!cleanPath) return false;
+
+    currentDataFilePath = cleanPath;
+    fs.writeFileSync(configFilePath, JSON.stringify({ activeFilePath: currentDataFilePath }, null, 2), 'utf-8');
+    return true;
+  } catch (error) {
+    console.error("Erreur lors de l'enregistrement du chemin :", error);
+    return false;
+  }
+}
 
 function createDefaultData() {
   return {
@@ -38,15 +98,16 @@ function resetToDefault() {
 }
 
 function getDataFilePath() {
-  return dataFilePath;
+  return currentDataFilePath;
 }
 
 function writeData(data) {
   try {
-    if (!fs.existsSync(userDataPath)) {
-      fs.mkdirSync(userDataPath, { recursive: true });
+    const targetDir = path.dirname(currentDataFilePath);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
     }
-    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(currentDataFilePath, JSON.stringify(data, null, 2), 'utf-8');
     return true;
   } catch (error) {
     console.error("Erreur d'écriture :", error);
@@ -56,12 +117,12 @@ function writeData(data) {
 
 function readData() {
   try {
-    if (!fs.existsSync(dataFilePath)) {
+    if (!fs.existsSync(currentDataFilePath)) {
       const initial = createDefaultData();
       writeData(initial);
       return initial;
     }
-    const raw = fs.readFileSync(dataFilePath, 'utf-8');
+    const raw = fs.readFileSync(currentDataFilePath, 'utf-8');
     return JSON.parse(raw);
   } catch (error) {
     console.error("Erreur de lecture :", error);
@@ -71,6 +132,7 @@ function readData() {
 }
 
 function init() {
+  loadStorageConfig();
   return readData();
 }
 
@@ -161,10 +223,12 @@ module.exports = {
   writeData,
   resetToDefault,
   getDataFilePath,
+  getMissingFilePath,
+  setActiveDataFilePath,
+  validateTabulaFile,
   addTransaction,
   updateTransaction,
   deleteTransaction,
   updateCategories,
-  updateAccounts,
-  resetToDefault,
+  updateAccounts
 };
