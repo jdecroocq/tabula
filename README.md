@@ -41,14 +41,14 @@ Les paquets compilés sont disponibles dans la section [Releases](https://github
 - **Paquet Debian / Ubuntu (`.deb`) :**
    Installation avec un gestionnaire de paquets graphique ou en ligne de commande :
    ```bash
-   sudo apt install ./tabula_1.0.0_amd64.deb
+   sudo apt install ./tabula_*.deb
    ```
 
 - **Binaire autonome (`.AppImage`) :**
    Rendre le fichier exécutable et le lancer :
    ```bash
-   chmod +x Tabula-1.0.0.AppImage
-   ./Tabula-1.0.0.AppImage
+   chmod +x Tabula-*.AppImage
+   ./Tabula-*.AppImage
    ```
 
 ### Windows et macOS

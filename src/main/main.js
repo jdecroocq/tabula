@@ -9,8 +9,8 @@ function createWindow () {
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 820,
-    minWidth: 900,
-    minHeight: 800,
+    minWidth: 850,
+    minHeight: 600,
     title: "Tabula",
     icon: path.join(__dirname, 'assets/icon.png'),
     webPreferences: {
@@ -29,6 +29,7 @@ app.whenReady().then(() => {
   createWindow();
 
   ipcMain.handle('app:get-version', () => app.getVersion());
+  ipcMain.handle('app:open-external', (e, url) => shell.openExternal(url));
 
   ipcMain.handle('db:get-data', async () => store.readData());
   ipcMain.handle('db:add-transaction', async (e, tx) => store.addTransaction(tx));
@@ -36,39 +37,36 @@ app.whenReady().then(() => {
   ipcMain.handle('db:delete-transaction', async (e, id) => store.deleteTransaction(id));
   ipcMain.handle('db:update-categories', async (e, cats) => store.updateCategories(cats));
   ipcMain.handle('db:update-accounts', async (e, accs) => store.updateAccounts(accs));
+  ipcMain.handle('db:reset-data', async () => store.resetToDefault());
+
+  ipcMain.handle('db:get-data-path', () => store.getDataFilePath());
+  ipcMain.handle('db:get-missing-path', () => store.getMissingFilePath());
   ipcMain.handle('db:open-data-folder', () => shell.showItemInFolder(store.getDataFilePath()));
-  
-  ipcMain.handle('db:get-data-path', () => {
-    return store.getDataFilePath();
-  });
 
-  ipcMain.handle('db:set-data-path', async (e, customPath) => {
-    return store.setDataPath(customPath);
-  });
+  ipcMain.handle('db:validate-file', async (e, filePath) => store.validateTabulaFile(filePath));
 
-  let isDialogOpen = false;
-  ipcMain.handle('db:select-data-folder', async () => {
-    if (isDialogOpen) return null; // Bloque les ouvertures multiples si déjà ouvert
-    isDialogOpen = true;
-
-    try {
-      const { canceled, filePaths } = await dialog.showOpenDialog({
-        title: 'Sélectionner le dossier pour la base de données',
-        properties: ['openDirectory', 'createDirectory']
-      });
-
-      if (!canceled && filePaths && filePaths[0]) {
-        return filePaths[0]; // Retourne uniquement le chemin sans l'enregistrer tout de suite
-      }
-      return null;
-    } finally {
-      isDialogOpen = false;
+  ipcMain.handle('db:select-data-file', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Sélectionner un fichier Tabula',
+      filters: [{ name: 'Base Tabula (.json)', extensions: ['json'] }],
+      properties: ['openFile']
+    });
+    if (!canceled && filePaths && filePaths[0]) {
+      const validation = store.validateTabulaFile(filePaths[0]);
+      return { path: filePaths[0], ...validation };
     }
+    return null;
   });
-  
-  ipcMain.handle('db:reset-data', async () => {
-    return store.resetToDefault();
+
+  ipcMain.handle('db:set-data-path', async (event, newPath) => {
+    const validation = store.validateTabulaFile(newPath);
+    if (validation.valid) {
+      store.setActiveDataFilePath(newPath);
+      return { success: true };
+    }
+    return { success: false, error: validation.error };
   });
+
 
   ipcMain.handle('db:export-backup', async () => {
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
@@ -90,21 +88,14 @@ app.whenReady().then(() => {
       properties: ['openFile']
     });
     if (!canceled && filePaths && filePaths[0]) {
-      try {
-        const raw = fs.readFileSync(filePaths[0], 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.accounts) && Array.isArray(parsed.transactions)) {
-          store.writeData(parsed);
-          return true;
-        }
-      } catch (err) {
-        console.error("Fichier de sauvegarde invalide :", err);
+      const validation = store.validateTabulaFile(filePaths[0]);
+      if (validation.valid) {
+        store.writeData(validation.data);
+        return true;
       }
     }
     return false;
   });
-
-  ipcMain.handle('app:open-external', (e, url) => shell.openExternal(url));
 });
 
 app.on('window-all-closed', () => {

@@ -227,13 +227,13 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <div class="settings-card-info">
                     <span class="settings-card-title">Emplacement</span>
-                    <span class="text-muted settings-card-desc">Ouvrez le dossier actuel de data.json ; définissez le répertoire où Tabula doit lire et enregistrer vos données.</span>
+                    <span class="text-muted settings-card-desc">Ouvrez l'emplacement actuel des données ou désignez le fichier JSON dans lequel Tabula doit lire et écrire vos opérations et préférences.</span>
                   </div>
                   <button type="button" class="btn" id="btn-open-folder">Ouvrir</button>
                 </div>
                 <div class="settings-row">
-                  <input type="text" class="settings-input font-mono" id="db-path-input" placeholder="Chemin du dossier ou fichier..." spellcheck="false">
-                  <button type="button" class="row-delete-btn" id="btn-browse-folder" title="Changer d'emplacement">
+                  <input type="text" class="settings-input font-mono" id="db-path-input" placeholder="Chemin du fichier JSON..." spellcheck="false">
+                  <button type="button" class="settings-row-btn" id="btn-browse-file" title="Choisir un autre fichier JSON">
                     <svg class="icon"><use href="icons.svg#icon-folder"></use></svg>
                   </button>
                 </div>
@@ -430,6 +430,32 @@
     </div>
   </div>
 
+  <!-- Modale fichier incompatible -->
+  <div class="modal-backdrop" id="incompatible-file-modal">
+    <div class="modal-card modal-sm">
+      <h2>Fichier incompatible</h2>
+      <div class="modal-body">
+        <p class="text-muted">Le fichier sélectionné n'est pas une base de données Tabula valide. Veuillez choisir un fichier JSON compatible.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="close-incompatible-btn">Compris</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale fichier introuvable (au démarrage) -->
+  <div class="modal-backdrop" id="missing-file-modal">
+    <div class="modal-card modal-sm">
+      <h2>Fichier introuvable</h2>
+      <div class="modal-body">
+        <p class="text-muted">Le fichier de données est introuvable (déplacé, renommé ou supprimé). Tabula a ouvert la base de données par défaut. Vous pouvez désigner un autre emplacement dans les paramètres.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="close-missing-file-btn">Compris</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modale en construction -->
   <div class="modal-backdrop" id="wip-modal">
     <div class="modal-card modal-sm">
@@ -437,19 +463,6 @@
       <p class="text-muted">Ce module sera disponible dans une prochaine mise à jour.</p>
       <div class="modal-footer">
         <button type="button" class="btn btn-primary" id="close-wip-btn">Compris</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modale nouvelle base créée -->
-  <div class="modal-backdrop" id="new-db-modal">
-    <div class="modal-card modal-sm">
-      <h2>Nouvelle base de données</h2>
-      <div class="modal-body">
-        <p class="text-muted">Aucun fichier data.json n'a été trouvé à cet emplacement. Une nouvelle base vierge a été créée.</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" id="close-new-db-btn">Compris</button>
       </div>
     </div>
   </div>

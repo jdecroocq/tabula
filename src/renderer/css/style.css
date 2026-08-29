@@ -1122,7 +1122,7 @@ tr.expanded .note-text {
   pointer-events: none;
 }
 
-.settings-row .row-delete-btn {
+.settings-row .settings-row-btn {
   width: 38px;
   height: 100%;
   background: transparent;
@@ -1144,12 +1144,12 @@ tr.expanded .note-text {
   flex-shrink: 0;
 }
 
-.settings-row .row-delete-btn:hover {
+.settings-row .settings-row-btn:hover {
   background: var(--color-2);
   color: var(--color-6);
 }
 
-.settings-row .row-delete-btn .icon {
+.settings-row .settings-row-btn .icon {
   width: 16px;
   height: 16px;
 }

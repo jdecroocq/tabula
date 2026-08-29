@@ -8,16 +8,21 @@ const configFilePath = path.join(userDataPath, 'config.json');
 const defaultDataFilePath = path.join(userDataPath, 'data.json');
 
 let currentDataFilePath = defaultDataFilePath;
+let missingCustomFilePath = null;
 
 function loadStorageConfig() {
+  missingCustomFilePath = null;
   try {
     if (fs.existsSync(configFilePath)) {
       const config = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
-      if (config.dataPath && typeof config.dataPath === 'string') {
-        const folder = path.dirname(config.dataPath);
-        if (fs.existsSync(folder)) {
-          currentDataFilePath = config.dataPath;
+      const customPath = config.activeFilePath || config.dataPath;
+      if (customPath) {
+        if (fs.existsSync(customPath)) {
+          currentDataFilePath = customPath;
           return;
+        } else {
+          missingCustomFilePath = customPath;
+          setActiveDataFilePath(defaultDataFilePath);
         }
       }
     }
@@ -27,34 +32,37 @@ function loadStorageConfig() {
   currentDataFilePath = defaultDataFilePath;
 }
 
-function setDataPath(targetPath) {
+function getMissingFilePath() {
+  const missing = missingCustomFilePath;
+  missingCustomFilePath = null;
+  return missing;
+}
+
+function validateTabulaFile(filePath) {
   try {
-    let cleanPath = (targetPath || '').trim();
-    if (!cleanPath) return { success: false, error: 'Chemin vide' };
-
-    let newFilePath = cleanPath.endsWith('.json') ? cleanPath : path.join(cleanPath, 'data.json');
-    let targetDir = path.dirname(newFilePath);
-
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
+    if (!fs.existsSync(filePath)) return { valid: false, error: 'not_found' };
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const data = JSON.parse(raw);
+    if (data && Array.isArray(data.accounts) && Array.isArray(data.categories) && Array.isArray(data.transactions)) {
+      return { valid: true, data };
     }
+    return { valid: false, error: 'invalid_format' };
+  } catch (e) {
+    return { valid: false, error: 'parse_error' };
+  }
+}
 
-    let isNewCreated = false;
+function setActiveDataFilePath(newFilePath) {
+  try {
+    const cleanPath = (newFilePath || '').trim();
+    if (!cleanPath) return false;
 
-    // Si aucun fichier n'existe à l'endroit ciblé, on crée une nouvelle base vierge
-    if (!fs.existsSync(newFilePath)) {
-      const freshData = createDefaultData();
-      fs.writeFileSync(newFilePath, JSON.stringify(freshData, null, 2), 'utf-8');
-      isNewCreated = true;
-    }
-
-    currentDataFilePath = newFilePath;
-    fs.writeFileSync(configFilePath, JSON.stringify({ dataPath: currentDataFilePath }, null, 2), 'utf-8');
-
-    return { success: true, created: isNewCreated, path: currentDataFilePath };
+    currentDataFilePath = cleanPath;
+    fs.writeFileSync(configFilePath, JSON.stringify({ activeFilePath: currentDataFilePath }, null, 2), 'utf-8');
+    return true;
   } catch (error) {
-    console.error("Erreur lors de la définition du chemin :", error);
-    return { success: false, error: error.message };
+    console.error("Erreur lors de l'enregistrement du chemin :", error);
+    return false;
   }
 }
 
@@ -215,10 +223,12 @@ module.exports = {
   writeData,
   resetToDefault,
   getDataFilePath,
-  setDataPath,
+  getMissingFilePath,
+  setActiveDataFilePath,
+  validateTabulaFile,
   addTransaction,
   updateTransaction,
   deleteTransaction,
   updateCategories,
-  updateAccounts,
+  updateAccounts
 };

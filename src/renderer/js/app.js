@@ -1122,7 +1122,7 @@ function renderSettingsAccounts() {
         <span class="currency-symbol">€</span>
       </div>
 
-      <button type="button" class="row-delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      <button type="button" class="settings-row-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
     `;
 
     const nameSegment = row.querySelector('.settings-name-segment');
@@ -1135,7 +1135,7 @@ function renderSettingsAccounts() {
       onCommit: (cents) => { acc.initial_balance_cents = cents; }
     });
 
-    row.querySelector('.row-delete-btn').addEventListener('click', () => {
+    row.querySelector('.settings-row-btn').addEventListener('click', () => {
       openSettingsDeleteModal('account', idx, acc);
     });
 
@@ -1155,14 +1155,14 @@ function renderSettingsCategories() {
         <input type="text" class="settings-input cat-name-input" value="${cat.name}" placeholder="Nom de la catégorie">
         <span class="char-counter">0/24</span>
       </div>
-      <button type="button" class="row-delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      <button type="button" class="settings-row-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
     `;
 
     const nameSegment = row.querySelector('.settings-name-segment');
     const nameInput = row.querySelector('.cat-name-input');
     setupCharCounter(nameSegment, nameInput, 24, (val) => { cat.name = val; });
 
-    row.querySelector('.row-delete-btn').addEventListener('click', () => {
+    row.querySelector('.settings-row-btn').addEventListener('click', () => {
       openSettingsDeleteModal('category', idx, cat);
     });
 
@@ -1190,25 +1190,18 @@ document.getElementById('settings-add-category-btn').addEventListener('click', (
 });
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
-  // 1. Si l'emplacement a changé, on applique le nouveau chemin
+  if (!validateAccountsList() || !validateCategoriesList()) return;
+
+  const finalAccounts = tempAccounts.map(a => ({ ...a, name: a.name.trim() }));
+  const finalCategories = tempCategories.map(c => ({ ...c, name: c.name.trim() }));
+
   if (tempDataPath && tempDataPath !== savedDataPath) {
-    const res = await window.tabula.setDataPath(tempDataPath);
-    if (res && res.success) {
-      savedDataPath = res.path;
-      if (res.created) {
-        document.getElementById('new-db-modal')?.classList.add('active');
-      }
-    }
-  } else {
-    // 2. Si l'emplacement n'a pas bougé, on enregistre les modifications de comptes/catégories
-    if (!validateAccountsList() || !validateCategoriesList()) return;
-
-    const finalAccounts = tempAccounts.map(a => ({ ...a, name: a.name.trim() }));
-    const finalCategories = tempCategories.map(c => ({ ...c, name: c.name.trim() }));
-
-    await window.tabula.updateAccounts(finalAccounts);
-    await window.tabula.updateCategories(finalCategories);
+    await window.tabula.setDataPath(tempDataPath);
+    savedDataPath = tempDataPath;
   }
+
+  await window.tabula.updateAccounts(finalAccounts);
+  await window.tabula.updateCategories(finalCategories);
 
   savedTheme = tempTheme;
   localStorage.setItem('tabula-theme', savedTheme);
@@ -1312,49 +1305,84 @@ document.getElementById('confirm-settings-delete-btn').addEventListener('click',
 let savedDataPath = '';
 let tempDataPath = '';
 
-// Affichage et mémorisation du chemin actif
+// Affichage du chemin actif
 async function refreshDataPathDisplay() {
   const inputEl = document.getElementById('db-path-input');
   if (window.tabula.getDataPath) {
     savedDataPath = await window.tabula.getDataPath();
     tempDataPath = savedDataPath;
-    if (inputEl) {
-      inputEl.value = savedDataPath || '';
-      inputEl.title = savedDataPath || '';
-    }
+    if (inputEl) inputEl.value = savedDataPath || '';
   }
 }
 
-// Saisie manuelle : on met simplement à jour tempDataPath en attente d'enregistrement
+// Validation automatique d'un chemin tapé manuellement au clavier
+async function handleManualPathCommit() {
+  const typedPath = dbPathInput.value.trim();
+  
+  // Si le champ est vide ou identique au chemin actuel, on remet le chemin sauvegardé
+  if (!typedPath || typedPath === savedDataPath) {
+    tempDataPath = savedDataPath;
+    dbPathInput.value = savedDataPath;
+    return;
+  }
+
+  // Vérification de la validité du fichier tapé
+  const res = await window.tabula.validateFile(typedPath);
+  
+  if (!res || !res.valid) {
+    // Fichier invalide / introuvable : Alerte et restauration du chemin d'origine
+    document.getElementById('incompatible-file-modal')?.classList.add('active');
+    dbPathInput.value = savedDataPath;
+    tempDataPath = savedDataPath;
+  } else {
+    // Fichier valide : mise à jour et chargement immédiat des comptes dans les paramètres
+    tempDataPath = typedPath;
+    tempAccounts = JSON.parse(JSON.stringify(res.data.accounts));
+    tempCategories = JSON.parse(JSON.stringify(res.data.categories));
+    renderSettingsAccounts();
+    renderSettingsCategories();
+  }
+}
+
 const dbPathInput = document.getElementById('db-path-input');
-dbPathInput?.addEventListener('input', () => {
-  tempDataPath = dbPathInput.value.trim();
-});
+dbPathInput?.addEventListener('blur', handleManualPathCommit);
 dbPathInput?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    dbPathInput.blur();
+    dbPathInput.blur(); // Déclenche la validation
   }
 });
 
-// Bouton dossier : sélectionne le chemin et met à jour l'input (en attente d'enregistrement)
-document.getElementById('btn-browse-folder')?.addEventListener('click', async () => {
-  if (!window.tabula.selectDataFolder) return;
-  const selectedPath = await window.tabula.selectDataFolder();
-  if (selectedPath) {
-    tempDataPath = selectedPath;
-    if (dbPathInput) dbPathInput.value = selectedPath;
+// Bouton Dossier : Sélectionner un fichier .json libre via l'explorateur
+document.getElementById('btn-browse-file')?.addEventListener('click', async () => {
+  if (!window.tabula.selectDataFile) return;
+  const res = await window.tabula.selectDataFile();
+  if (!res) return; // Annulé par l'utilisateur
+
+  // Si le fichier n'est pas un JSON Tabula valide
+  if (!res.valid) {
+    document.getElementById('incompatible-file-modal')?.classList.add('active');
+    return;
   }
+
+  // Si le fichier est valide : mise à jour du chemin et chargement immédiat des comptes dans les paramètres
+  tempDataPath = res.path;
+  if (dbPathInput) dbPathInput.value = res.path;
+
+  tempAccounts = JSON.parse(JSON.stringify(res.data.accounts));
+  tempCategories = JSON.parse(JSON.stringify(res.data.categories));
+  renderSettingsAccounts();
+  renderSettingsCategories();
 });
 
-// Bouton Ouvrir l'emplacement actif dans l'OS
+// Bouton Ouvrir le dossier actuel dans l'OS
 document.getElementById('btn-open-folder')?.addEventListener('click', () => {
   window.tabula.openDataFolder();
 });
 
-// Bouton "Compris" de la modale
-document.getElementById('close-new-db-btn')?.addEventListener('click', () => {
-  document.getElementById('new-db-modal')?.classList.remove('active');
+// Bouton Fermer de la modale Fichier Incompatible
+document.getElementById('close-incompatible-btn')?.addEventListener('click', () => {
+  document.getElementById('incompatible-file-modal')?.classList.remove('active');
 });
 
 
@@ -1445,6 +1473,8 @@ document.addEventListener('keydown', (e) => {
     }
 
     const activeModals = [
+      { id: 'missing-file-modal', closeFn: () => document.getElementById('missing-file-modal').classList.remove('active') },
+      { id: 'incompatible-file-modal', closeFn: () => document.getElementById('incompatible-file-modal').classList.remove('active') },
       { id: 'settings-delete-modal', closeFn: () => document.getElementById('settings-delete-modal').classList.remove('active') },
       { id: 'reset-warning-modal', closeFn: () => document.getElementById('reset-warning-modal').classList.remove('active') },
       { id: 'import-warning-modal', closeFn: () => document.getElementById('import-warning-modal').classList.remove('active') },
@@ -1520,10 +1550,24 @@ async function loadApp() {
     document.getElementById('app-version').innerText = `v${version}`;
   }
 
+
   await refreshDataPathDisplay();
+
+  // Détection du fichier manquant au démarrage
+  if (window.tabula.getMissingPath) {
+    const missing = await window.tabula.getMissingPath();
+    if (missing) {
+      document.getElementById('missing-file-modal')?.classList.add('active');
+    }
+  }
 
   initCustomSelects();
   renderBalanceCarousel();
   renderTransactions();
 }
+
+document.getElementById('close-missing-file-btn')?.addEventListener('click', () => {
+  document.getElementById('missing-file-modal')?.classList.remove('active');
+});
+
 loadApp();
