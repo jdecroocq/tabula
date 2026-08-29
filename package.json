@@ -1,6 +1,6 @@
 {
   "name": "tabula",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Livre de comptes personnel.",
   "homepage": "https://github.com/jdecroocq/tabula",
   "main": "src/main/main.js",
