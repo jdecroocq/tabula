@@ -1,18 +1,25 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
+const https = require('https');
 const fs = require('fs');
 const store = require('./store');
 
 let mainWindow;
 
 function createWindow () {
+
+  const isWin = process.platform === 'win32';
+  const appIcon = isWin 
+    ? path.join(__dirname, 'assets/icon-win.png') 
+    : path.join(__dirname, 'assets/icon.png');
+    
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 820,
     minWidth: 850,
     minHeight: 600,
     title: "Tabula",
-    icon: path.join(__dirname, 'assets/icon.png'),
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -96,6 +103,65 @@ app.whenReady().then(() => {
     }
     return false;
   });
+
+  ipcMain.handle('app:check-update', async () => {
+    const currentVersion = app.getVersion();
+
+    return new Promise((resolve) => {
+      const options = {
+        hostname: 'api.github.com',
+        path: '/repos/jdecroocq/tabula/releases/latest',
+        method: 'GET',
+        headers: { 'User-Agent': 'Tabula-App' },
+        timeout: 10000
+      };
+
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          if (res.statusCode === 200) {
+            try {
+              const release = JSON.parse(body);
+              const latestTag = release.tag_name || '';
+              const latestVersion = latestTag.replace(/^v/, '');
+
+              const [cMaj, cMin, cPat] = currentVersion.split('.').map(Number);
+              const [lMaj, lMin, lPat] = latestVersion.split('.').map(Number);
+
+              let hasUpdate = false;
+              if (lMaj > cMaj) hasUpdate = true;
+              else if (lMaj === cMaj && lMin > cMin) hasUpdate = true;
+              else if (lMaj === cMaj && lMin === cMin && lPat > cPat) hasUpdate = true;
+
+              resolve({
+                success: true,
+                hasUpdate: hasUpdate,
+                currentVersion: currentVersion,
+                latestVersion: latestVersion,
+                releaseUrl: release.html_url,
+                publishedAt: release.published_at ? release.published_at.split('T')[0] : '' // Date YYYY-MM-DD
+              });
+            } catch (e) {
+              resolve({ success: false, error: 'parse_error' });
+            }
+          } else {
+            resolve({ success: false, error: 'http_' + res.statusCode });
+          }
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ success: false, error: 'timeout' });
+      });
+
+      req.on('error', () => resolve({ success: false, error: 'network_error' }));
+      req.end();
+    });
+  });
+
+
 });
 
 app.on('window-all-closed', () => {

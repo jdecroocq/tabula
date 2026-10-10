@@ -85,6 +85,7 @@ function createDefaultData() {
       { id: 'cat_' + crypto.randomUUID(), name: 'Investissements' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Revenus de placements' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Salaire' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Impôts et taxes' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Divers' }
     ],
     transactions: []

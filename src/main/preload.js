@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('tabula', {
   exportBackup: () => ipcRenderer.invoke('db:export-backup'),
   importBackup: () => ipcRenderer.invoke('db:import-backup'),
   validateFile: (filePath) => ipcRenderer.invoke('db:validate-file', filePath),
+  checkUpdate: () => ipcRenderer.invoke('app:check-update'),
 });
