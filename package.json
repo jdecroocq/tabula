@@ -1,6 +1,6 @@
 {
   "name": "tabula",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Livre de comptes personnel.",
   "homepage": "https://github.com/jdecroocq/tabula",
   "main": "src/main/main.js",
@@ -11,7 +11,10 @@
   "license": "MIT",
   "scripts": {
     "start": "electron . --no-sandbox",
-    "dist": "electron-builder --linux"
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux",
+    "dist:win": "electron-builder --windows",
+    "dist:mac": "electron-builder --mac"
   },
   "devDependencies": {
     "electron": "^28.2.0",
@@ -35,6 +38,28 @@
       "icon": "src/main/assets/icon.png",
       "category": "Office;Finance;",
       "maintainer": "Jean Decroocq <jdecroocq.dev@gmail.com>"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "src/main/assets/icon-win.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tabula"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "src/main/assets/icon.png",
+      "category": "public.app-category.finance"
     }
   }
 }

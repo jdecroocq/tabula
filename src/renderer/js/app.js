@@ -1,5 +1,7 @@
 document.addEventListener('contextmenu', e => e.preventDefault());
 
+let globalAppVersion = '';
+
 let db = { accounts: [], categories: [], transactions: [] };
 let searchQuery = '';
 let currentOpType = 'expense';
@@ -417,7 +419,7 @@ function renderBalanceCarousel() {
   const balances = calculateBalances();
 
   const slidesData = [
-    { title: "Solde Total Disponible", balance: balances.total },
+    { title: "Solde total", balance: balances.total },
     ...db.accounts.map(acc => ({
       title: `Compte • ${acc.name}`,
       balance: balances.byAccount[acc.id] || 0
@@ -973,7 +975,7 @@ document.getElementById('confirm-delete-btn').addEventListener('click', async ()
 });
 
 // ======================================================================
-// PARAMÈTRES (comptes, catégories, thème, validation)
+// PARAMÈTRES
 // ======================================================================
 
 const settingsModal = document.getElementById('settings-modal');
@@ -1010,15 +1012,15 @@ function openSettingsModal() {
   tempAccounts = JSON.parse(JSON.stringify(db.accounts));
   tempCategories = JSON.parse(JSON.stringify(db.categories));
   tempTheme = savedTheme;
-  tempDataPath = savedDataPath; // Mémorise le chemin initial
+  tempDataPath = savedDataPath;
 
   const pathInput = document.getElementById('db-path-input');
   if (pathInput) pathInput.value = tempDataPath || '';
 
   renderSettingsAccounts();
   renderSettingsCategories();
+  resetUpdateView();
 
-  // Synchronise le menu déroulant sur le thème actuel pour visualier
   const themeSelect = document.getElementById('settings-theme-select');
   if (themeSelect) {
     const activeOpt = themeSelect.querySelector(`.select-option[data-value="${tempTheme}"]`);
@@ -1046,8 +1048,7 @@ document.getElementById('settings-theme-select').addEventListener('change', (e) 
   applyVisualTheme(tempTheme);
 });
 
-// Moteur de validation (saisie vie et doublons)
-
+// Moteur de validation (saisie vide et doublons)
 function validateAccountsList() {
   let isValid = true;
   const nameCounts = {};
@@ -1210,8 +1211,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   settingsModal.classList.remove('active');
 });
 
-// Navigation entre ongle protégés (bloque si saisie invalide)
-
+// Navigation entre onglets protégés (bloque si saisie invalide)
 document.querySelectorAll('.settings-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const currentActivePane = document.querySelector('.settings-pane.active');
@@ -1277,13 +1277,10 @@ document.getElementById('cancel-reset-warning-btn').addEventListener('click', ()
 document.getElementById('confirm-reset-warning-btn').addEventListener('click', async () => {
   document.getElementById('reset-warning-modal').classList.remove('active');
   
-  // Ecrase le fichier sur le disque avec les valeurs d'usine
   await window.tabula.resetData();
   
-  // Recharge toute l'interface à neuf
   await loadApp();
   
-  // Ferme les paramètres
   closeSettingsModal();
 });
 
@@ -1353,7 +1350,7 @@ dbPathInput?.addEventListener('keydown', (e) => {
   }
 });
 
-// Bouton Dossier : Sélectionner un fichier .json libre via l'explorateur
+// Bouton Dossier pour sélectionner un fichier .json libre via l'explorateur
 document.getElementById('btn-browse-file')?.addEventListener('click', async () => {
   if (!window.tabula.selectDataFile) return;
   const res = await window.tabula.selectDataFile();
@@ -1380,10 +1377,84 @@ document.getElementById('btn-open-folder')?.addEventListener('click', () => {
   window.tabula.openDataFolder();
 });
 
-// Bouton Fermer de la modale Fichier Incompatible
+// Bouton fermer de la modale fichier incompatible
 document.getElementById('close-incompatible-btn')?.addEventListener('click', () => {
   document.getElementById('incompatible-file-modal')?.classList.remove('active');
 });
+
+
+
+// Onglet mises à jour
+
+const updateStage = document.getElementById('update-stage');
+
+function resetUpdateView() {
+  if (!updateStage) return;
+  
+  const currentVerText = globalAppVersion ? `v${globalAppVersion}` : '';
+
+  updateStage.innerHTML = `
+    <svg class="icon icon-illu"><use href="icons.svg#icon-illu-update"></use></svg>
+    <button type="button" class="btn" id="btn-check-update" style="margin-top: 4px;">Rechercher une mise à jour</button>
+  `;
+
+  document.getElementById('btn-check-update')?.addEventListener('click', runUpdateCheck);
+}
+
+async function runUpdateCheck() {
+  const btn = document.getElementById('btn-check-update') || document.getElementById('btn-retry-update');
+  
+  if (btn) {
+    btn.style.width = `${btn.offsetWidth}px`;
+    btn.disabled = true;
+    btn.innerText = 'Recherche...';
+  }
+
+  const res = await window.tabula.checkUpdate();
+
+  if (!res || !res.success) {
+    updateStage.innerHTML = `
+      <svg class="icon icon-illu"><use href="icons.svg#icon-illu-network-problem"></use></svg>
+      <p class="update-text">Oups ! La recherche a échoué. Vérifiez votre connexion Internet. Si le problème persiste, il peut s'agir d'une indisponibilité temporaire des serveurs.</p>
+      <button type="button" class="btn" id="btn-retry-update" style="margin-top: 8px;">Réessayer</button>
+    `;
+    document.getElementById('btn-retry-update')?.addEventListener('click', runUpdateCheck);
+    return;
+  }
+
+  if (res.hasUpdate) {
+    const formattedDate = res.publishedAt ? formatDate(res.publishedAt) : '';
+    const dateText = formattedDate ? `Publiée le ${formattedDate}` : '';
+
+    updateStage.innerHTML = `
+      <svg class="icon icon-illu"><use href="icons.svg#icon-illu-delivery"></use></svg>
+      <p class="update-text">Une version plus récente est disponible !</p>
+      
+      <!-- La structure officielle sans aucun style en ligne -->
+      <div class="settings-cards-group">
+        <div class="settings-card">
+          <div class="settings-card-info" style="text-align: left;">
+            <span class="settings-card-title">Tabula v${res.latestVersion}</span>
+            <span class="text-muted settings-card-desc">${dateText}</span>
+          </div>
+          <button type="button" class="btn" id="btn-get-update">Obtenir</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-get-update')?.addEventListener('click', () => {
+      window.tabula.openExternal(res.releaseUrl);
+    });
+    return;
+  }
+
+  updateStage.innerHTML = `
+    <svg class="icon icon-illu icon-green"><use href="icons.svg#icon-illu-check"></use></svg>
+    <p class="update-text">Votre application est à jour.</p>
+  `;
+}
+
+
 
 
 
@@ -1547,9 +1618,15 @@ async function loadApp() {
 
   if (window.tabula.getVersion) {
     const version = await window.tabula.getVersion();
+    db._appVersion = version; 
+    
     document.getElementById('app-version').innerText = `v${version}`;
+    
+    const updateVersionEl = document.getElementById('update-current-version');
+    if (updateVersionEl) {
+      updateVersionEl.innerText = `v${version}`;
+    }
   }
-
 
   await refreshDataPathDisplay();
 
@@ -1565,6 +1642,7 @@ async function loadApp() {
   renderBalanceCarousel();
   renderTransactions();
 }
+
 
 document.getElementById('close-missing-file-btn')?.addEventListener('click', () => {
   document.getElementById('missing-file-modal')?.classList.remove('active');

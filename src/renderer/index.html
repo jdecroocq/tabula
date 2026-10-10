@@ -173,7 +173,7 @@
               <p class="text-muted">Automatisez la saisie de vos charges fixes et abonnements.</p>
             </div>
             <div class="settings-wip-card">
-              <svg class="icon"><use href="icons.svg#icon-dev"></use></svg>
+              <svg class="icon icon-illu"><use href="icons.svg#icon-illu-dev"></use></svg>
               <div class="wip-title">En cours de développement</div>
               <p class="text-muted">La planification automatique des écritures sera intégrée dans une prochaine mise à jour.</p>
             </div>
@@ -186,7 +186,7 @@
               <p class="text-muted">Pré-remplissez vos formulaires selon des mots-clés de description.</p>
             </div>
             <div class="settings-wip-card">
-              <svg class="icon"><use href="icons.svg#icon-dev"></use></svg>
+              <svg class="icon icon-illu"><use href="icons.svg#icon-illu-dev"></use></svg>
               <div class="wip-title">En cours de développement</div>
               <p class="text-muted">L'auto-complétion intelligente sera disponible prochainement.</p>
             </div>
@@ -196,7 +196,7 @@
           <div class="settings-pane" id="tab-backup">
             <div class="pane-header">
               <h3>Gestion des données</h3>
-              <p class="text-muted">Sauvegardez, restaurez ou réinitialisez votre base de données locale.</p>
+              <p class="text-muted">Sauvegardez, restaurez ou réinitialisez votre base de données.</p>
             </div>
             <div class="settings-cards-group">
               <div class="settings-card">
@@ -263,18 +263,21 @@
             </div>
           </div>
 
+
           <!-- Onglet mise à jour -->
           <div class="settings-pane" id="tab-update">
             <div class="pane-header">
               <h3>Gestionnaire de mise à jour</h3>
-              <p class="text-muted">Vérifiez l'état de votre version et installez les dernières améliorations.</p>
+              <p class="text-muted">Vérifiez votre version et accédez aux nouveautés.</p>
             </div>
-            <div class="settings-wip-card">
-              <svg class="icon"><use href="icons.svg#icon-dev"></use></svg>
-              <div class="wip-title">En cours de développement</div>
-              <p class="text-muted">Le système de détection et de téléchargement des nouvelles versions de Tabula sera disponible prochainement. En attendant, vous pouvez consulter les dernières publications directement sur le dépôt GitHub.</p>
-            </div>
+
+            <p class="update-current-line">
+              Version actuelle : <span class="font-mono" id="update-current-version"></span>
+            </p>
+
+            <div id="update-stage" class="update-center-stage"></div>
           </div>
+
 
         </div>
       </div>
