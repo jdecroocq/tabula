@@ -1108,6 +1108,7 @@ function renderSettingsAccounts() {
   tempAccounts.forEach((acc, idx) => {
     const row = document.createElement('div');
     row.className = 'settings-row';
+    row.setAttribute('data-id', acc.id);
     const initialEuros = formatMoneyInput(acc.initial_balance_cents);
 
     row.innerHTML = `
@@ -1123,7 +1124,10 @@ function renderSettingsAccounts() {
         <span class="currency-symbol">€</span>
       </div>
 
-      <button type="button" class="settings-row-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
     `;
 
     const nameSegment = row.querySelector('.settings-name-segment');
@@ -1136,12 +1140,14 @@ function renderSettingsAccounts() {
       onCommit: (cents) => { acc.initial_balance_cents = cents; }
     });
 
-    row.querySelector('.settings-row-btn').addEventListener('click', () => {
+    row.querySelector('.delete-btn').addEventListener('click', () => {
       openSettingsDeleteModal('account', idx, acc);
     });
 
     accountsListEl.appendChild(row);
   });
+  
+  setupDragAndDrop(accountsListEl, tempAccounts, renderSettingsAccounts);
 }
 
 // Rendu des catégories
@@ -1150,26 +1156,307 @@ function renderSettingsCategories() {
   tempCategories.forEach((cat, idx) => {
     const row = document.createElement('div');
     row.className = 'settings-row';
+    row.setAttribute('data-id', cat.id);
 
     row.innerHTML = `
       <div class="settings-name-segment">
         <input type="text" class="settings-input cat-name-input" value="${cat.name}" placeholder="Nom de la catégorie">
         <span class="char-counter">0/24</span>
       </div>
-      <button type="button" class="settings-row-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
     `;
 
     const nameSegment = row.querySelector('.settings-name-segment');
     const nameInput = row.querySelector('.cat-name-input');
     setupCharCounter(nameSegment, nameInput, 24, (val) => { cat.name = val; });
 
-    row.querySelector('.settings-row-btn').addEventListener('click', () => {
+    row.querySelector('.delete-btn').addEventListener('click', () => {
       openSettingsDeleteModal('category', idx, cat);
     });
 
     categoriesListEl.appendChild(row);
   });
+
+  setupDragAndDrop(categoriesListEl, tempCategories, renderSettingsCategories);
 }
+
+
+// Changement de l'organisation
+// ======================================================================
+// DRAG & DROP GÉNÉRIQUE (Scroll + animation Échap par clone)
+// ======================================================================
+
+function setupDragAndDrop(containerEl, dataArray, renderCallback) {
+  const rows = containerEl.querySelectorAll('.settings-row');
+  const scrollContainer = containerEl.closest('.settings-content') || containerEl.parentElement;
+  
+  rows.forEach(row => {
+    const handle = row.querySelector('.drag-handle');
+    if (!handle) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+    let placeholder = null;
+    let rowRect = null;
+    let currentIndex = -1;
+    let placeholderIndex = -1;
+    let originalData = [];
+
+    handle.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      
+      isDragging = true;
+      rowRect = row.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      
+      currentIndex = Array.from(containerEl.children).indexOf(row);
+      originalData = [...dataArray]; 
+      
+      document.body.classList.add('is-dragging-active');
+
+      placeholder = document.createElement('div');
+      placeholder.className = 'settings-row-placeholder';
+      containerEl.insertBefore(placeholder, row);
+      
+      row.classList.add('dragging');
+      row.style.width = `${rowRect.width}px`;
+      row.style.left = `${rowRect.left}px`;
+      row.style.top = `${rowRect.top}px`;
+      
+      placeholderIndex = currentIndex;
+      
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('keydown', onKeyDown, true);
+      if (scrollContainer) {
+        scrollContainer.addEventListener('scroll', onScroll);
+      }
+    });
+
+    function onScroll() {
+      if (!isDragging) return;
+      onMouseMove({ clientX: lastMouseX, clientY: lastMouseY });
+    }
+
+    function onMouseMove(e) {
+      if (!isDragging) return;
+
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      row.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+      const allElements = Array.from(containerEl.children).filter(el => 
+        el !== row && el.classList.contains('settings-row')
+      );
+
+      let newIndex = allElements.length;
+      for (let i = 0; i < allElements.length; i++) {
+        const elRect = allElements[i].getBoundingClientRect();
+        
+        if (e.clientY < elRect.top + (elRect.height / 2)) {
+          newIndex = i;
+          break;
+        }
+      }
+
+      if (newIndex !== placeholderIndex) {
+        const rowsToAnimate = Array.from(containerEl.querySelectorAll('.settings-row:not(.dragging)'));
+        const firstRects = rowsToAnimate.map(r => r.getBoundingClientRect());
+
+        const targetEl = allElements[newIndex];
+        if (targetEl) {
+          containerEl.insertBefore(placeholder, targetEl);
+        } else {
+          containerEl.appendChild(placeholder);
+        }
+        
+        placeholderIndex = newIndex;
+
+        rowsToAnimate.forEach((r, i) => {
+          const lastRect = r.getBoundingClientRect();
+          const delta = firstRects[i].top - lastRect.top;
+          
+          if (delta !== 0) {
+            r.classList.remove('is-animating');
+            r.style.transform = `translateY(${delta}px)`;
+            void r.offsetHeight; 
+            r.classList.add('is-animating');
+            r.style.transform = '';
+            setTimeout(() => {
+              r.classList.remove('is-animating');
+              r.style.transform = '';
+            }, 200);
+          }
+        });
+      }
+    }
+
+    function onMouseUp() {
+      if (!isDragging) return;
+      finishDrag(false);
+    }
+
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        finishDrag(true);
+      }
+    }
+
+    function finishDrag(cancel) {
+      isDragging = false;
+      
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('keydown', onKeyDown, true);
+      if (scrollContainer) {
+        scrollContainer.removeEventListener('scroll', onScroll);
+      }
+      document.body.classList.remove('is-dragging-active');
+
+      if (cancel) {
+        // --- ANNULATION (ÉCHAP) : APPROCHE PAR CLONE ---
+        
+        // 1. Calculer la position visuelle actuelle de la carte
+        const deltaX = lastMouseX - startX;
+        const deltaY = lastMouseY - startY;
+        const currentTop = rowRect.top + deltaY;
+        const currentLeft = rowRect.left + deltaX;
+        const rowId = row.getAttribute('data-id');
+
+        // 2. Mémoriser les positions actuelles des AUTRES cartes
+        const currentRects = new Map();
+        containerEl.querySelectorAll('.settings-row').forEach(el => {
+          if (el !== row) {
+            currentRects.set(el.getAttribute('data-id'), el.getBoundingClientRect());
+          }
+        });
+
+        // 3. Détacher la carte en main et le placeholder du container
+        placeholder.remove();
+        row.remove(); // Retire row du container
+
+        // 4. Restaurer les données et redessiner (ordre original)
+        dataArray.length = 0;
+        dataArray.push(...originalData);
+        renderCallback();
+
+        // 5. Récupérer la nouvelle carte (recréée par renderCallback)
+        const newRow = containerEl.querySelector(`.settings-row[data-id="${rowId}"]`);
+
+        // 6. Prépositionner les autres cartes pour le FLIP (avant de révéler row)
+        const elementsToAnimate = [];
+        containerEl.querySelectorAll('.settings-row').forEach(el => {
+          if (el === newRow) {
+            el.style.visibility = 'hidden';
+            return;
+          }
+          const id = el.getAttribute('data-id');
+          const oldRect = currentRects.get(id);
+          if (oldRect) {
+            const newRect = el.getBoundingClientRect();
+            const delta = oldRect.top - newRect.top;
+            if (delta !== 0) {
+              el.style.transform = `translateY(${delta}px)`;
+              elementsToAnimate.push(el);
+            }
+          }
+        });
+
+        // 7. Préparer le clone pour l'animation : on le sort du container
+        //    et on l'attache au body pour qu'il survive à renderCallback
+        document.body.appendChild(row);
+        row.style.transition = 'none';
+        row.style.top = `${currentTop}px`;
+        row.style.left = `${currentLeft}px`;
+        row.style.transform = 'none';
+
+        // 8. Forcer un reflow global
+        void row.offsetHeight;
+        void containerEl.offsetHeight;
+
+        // 9. Lancer les animations
+        row.classList.add('is-animating');
+        if (newRow) {
+          const targetRect = newRow.getBoundingClientRect();
+          row.style.top = `${targetRect.top}px`;
+          row.style.left = `${targetRect.left}px`;
+        }
+
+        elementsToAnimate.forEach(el => {
+          el.classList.add('is-animating');
+          el.style.transform = '';
+        });
+
+        // 10. Nettoyage final
+        setTimeout(() => {
+          row.remove();
+          if (newRow) newRow.style.visibility = '';
+          elementsToAnimate.forEach(el => {
+            el.classList.remove('is-animating');
+            el.style.transform = '';
+          });
+        }, 200);
+
+      } else {
+        // --- LÂCHER (DROP) ---
+        const placeholderRect = placeholder.getBoundingClientRect();
+        
+        const currentTop = rowRect.top + (lastMouseY - startY);
+        const currentLeft = rowRect.left + (lastMouseX - startX);
+        
+        row.style.transition = 'none';
+        row.style.top = `${currentTop}px`;
+        row.style.left = `${currentLeft}px`;
+        row.style.transform = 'none';
+        
+        void row.offsetHeight;
+        
+        row.classList.add('is-animating');
+        row.style.top = `${placeholderRect.top}px`;
+        row.style.left = `${placeholderRect.left}px`;
+
+        setTimeout(() => {
+          const siblingsWithoutDrag = Array.from(containerEl.children).filter(el => el !== row);
+          const targetIndex = siblingsWithoutDrag.indexOf(placeholder);
+          
+          if (currentIndex !== targetIndex) {
+            const [movedItem] = dataArray.splice(currentIndex, 1);
+            dataArray.splice(targetIndex, 0, movedItem);
+          }
+
+          row.classList.remove('dragging');
+          row.classList.remove('is-animating');
+          row.style.transition = '';
+          row.style.transform = '';
+          row.style.width = '';
+          row.style.left = '';
+          row.style.top = '';
+          
+          renderCallback(); 
+        }, 200);
+      }
+    }
+  });
+}
+
+
+
 
 // Ajout de compte
 document.getElementById('settings-add-account-btn').addEventListener('click', () => {
@@ -1474,8 +1761,10 @@ document.getElementById('close-wip-btn').addEventListener('click', () => wipModa
 document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
   backdrop.addEventListener('click', (e) => {
     if (e.target !== backdrop) return;
+    
     if (backdrop.id === 'operation-modal') closeOpModal();
-    else if (backdrop.id === 'settings-modal') closeSettingsModal();
+    else if (backdrop.id === 'settings-modal') { 
+    }
     else if (backdrop.id === 'delete-modal') { backdrop.classList.remove('active'); deletingTransactionId = null; }
     else backdrop.classList.remove('active');
   });

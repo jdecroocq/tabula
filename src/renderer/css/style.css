@@ -1103,6 +1103,81 @@ tr.expanded .note-text {
   max-width: 460px;
 }
 
+
+
+
+
+
+
+/* ==================================================================== */
+/* DRAG & DROP - PARAMÈTRES (COMPTES & CATÉGORIES)                      */
+/* ==================================================================== */
+
+.settings-row-actions {
+  display: flex;
+  height: 100%;
+  flex-shrink: 0;
+}
+
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* La carte fantôme (placeholder en pointillés) */
+.settings-row-placeholder {
+  height: 38px;
+  border: var(--border-dashed);
+  border-radius: var(--radius-md);
+  background: transparent;
+  box-sizing: border-box;
+}
+
+/* L'étiquette qu'on a "en main" */
+.settings-row.dragging {
+  position: fixed !important;
+  z-index: 9999;
+  pointer-events: none;
+  background: var(--color-1);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  cursor: grabbing;
+}
+
+.settings-row.dragging * {
+  pointer-events: none;
+}
+
+/* Classe d'animation (modifiable à loisir : durée, easing, etc.) */
+.is-animating {
+  transition: transform 0.2s ease-out, top 0.2s ease-out, left 0.2s ease-out !important;
+}
+
+/* Désactive les survols de TOUS les éléments interactifs pendant le drag */
+body.is-dragging-active .settings-row:not(.dragging),
+body.is-dragging-active .settings-tab,
+body.is-dragging-active .btn,
+body.is-dragging-active .btn-dashed,
+body.is-dragging-active .settings-row-btn {
+  pointer-events: none;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 .settings-row {
   display: flex;
   align-items: center;
