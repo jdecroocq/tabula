@@ -88,7 +88,8 @@ function createDefaultData() {
       { id: 'cat_' + crypto.randomUUID(), name: 'Impôts et taxes' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Divers' }
     ],
-    transactions: []
+    transactions: [],
+    rules: []
   };
 }
 
@@ -124,7 +125,11 @@ function readData() {
       return initial;
     }
     const raw = fs.readFileSync(currentDataFilePath, 'utf-8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    
+    if (!parsed.rules) parsed.rules = [];
+    
+    return parsed;
   } catch (error) {
     console.error("Erreur de lecture :", error);
     const initial = createDefaultData();
@@ -218,6 +223,13 @@ function updateAccounts(newAccounts) {
   return data.accounts;
 }
 
+function updateRules(newRules) {
+  const data = readData();
+  data.rules = newRules;
+  writeData(data);
+  return data.rules;
+}
+
 module.exports = {
   init,
   readData,
@@ -231,5 +243,6 @@ module.exports = {
   updateTransaction,
   deleteTransaction,
   updateCategories,
-  updateAccounts
+  updateAccounts,
+  updateRules
 };

@@ -1368,3 +1368,118 @@ body.is-dragging-active .settings-row-btn {
   line-height: 1.5;
   margin: 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* à positionner ailleurs dans le code */
+/* ==================================================================== */
+/* RÈGLES - PARAMÈTRES                                                  */
+/* ==================================================================== */
+
+.settings-keyword-segment {
+  width: 120px; /* Agrandi pour être plus lisible */
+  display: flex;
+  align-items: center;
+  height: 100%;
+  background: transparent;
+  border-left: var(--border);
+}
+
+.settings-keyword-segment:focus-within {
+  background: var(--color-0);
+}
+
+.settings-keyword-segment:hover:not(:focus-within) {
+  background: var(--color-2);
+}
+
+.settings-keyword-segment .settings-input {
+  width: 100%;
+  height: 100%;
+  text-align: left; /* Alignement naturel de gauche à droite */
+  padding: 0 14px;
+  font-family: var(--font-sans); /* Même police que le reste */
+  font-size: 0.9rem; /* Même taille */
+  font-weight: 400; /* Pas de gras */
+  color: var(--color-6);
+}
+
+/* Afficher le compteur de caractères uniquement au focus */
+.settings-keyword-segment:focus-within .char-counter {
+  display: inline-block;
+}
+
+/* ==================================================================== */
+/* CHAMPS DÉSACTIVÉS (ex: Date automatique dans les règles)             */
+/* ==================================================================== */
+
+.input-date:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--color-1);
+}
+
+
+/* ==================================================================== */
+/* INDICATIONS DISCRÈTES DANS LES LABELS                                */
+/* ==================================================================== */
+
+.input-group label .label-hint {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--color-4);
+  margin-left: 2px;
+}
+
+
+/* ==================================================================== */
+/* AUTO-COMPLÉTION DES RÈGLES (Description)                             */
+/* ==================================================================== */
+
+#payee-suggestions .select-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+#payee-suggestions .rule-suggestion-key {
+  /* On retire le gras, on garde une couleur de texte normal */
+  color: var(--color-6);
+}
+
+#payee-suggestions .rule-suggestion-name {
+  /* Le nom de la règle est légèrement plus discret, comme une description */
+  color: var(--color-4);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Au survol, les deux textes s'éclaircissent (comportement natif des menus) */
+#payee-suggestions .select-option:hover .rule-suggestion-name,
+#payee-suggestions .select-option.selected .rule-suggestion-name,
+#payee-suggestions .select-option:hover .rule-suggestion-key,
+#payee-suggestions .select-option.selected .rule-suggestion-key {
+  color: var(--color-5);
+}

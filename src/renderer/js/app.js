@@ -2,7 +2,7 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 
 let globalAppVersion = '';
 
-let db = { accounts: [], categories: [], transactions: [] };
+let db = { accounts: [], categories: [], transactions: [], rules: [] };
 let searchQuery = '';
 let currentOpType = 'expense';
 
@@ -183,11 +183,130 @@ function setupCharCounter(segmentEl, inputEl, maxLimit, onCommit) {
   });
 }
 
+// ======================================================================
+// AUTO-COMPLÉTION DES RÈGLES
+// ======================================================================
+
+const payeeInput = document.getElementById('op-payee');
+const suggestionsMenu = document.getElementById('payee-suggestions');
+const suggestionsList = suggestionsMenu.querySelector('.select-menu');
+let selectedSuggestionIndex = -1;
+
+payeeInput.addEventListener('input', () => {
+  const val = payeeInput.value;
+  
+  // Si ça commence par / et qu'il n'y a pas d'espace, on affiche le menu
+  if (val.startsWith('/') && !val.includes(' ')) {
+    const query = val.substring(1).toLowerCase();
+    const matchingRules = db.rules.filter(r => r.keyword && r.keyword.toLowerCase().startsWith(query));
+
+    suggestionsList.innerHTML = '';
+
+    if (matchingRules.length === 0) {
+      suggestionsList.innerHTML = '<div class="select-option select-no-result">Aucune règle</div>';
+    } else {
+      matchingRules.forEach((rule, idx) => {
+        const option = document.createElement('div');
+        option.className = 'select-option';
+        if (idx === 0) selectedSuggestionIndex = 0; // On sélectionne la première par défaut
+        option.innerHTML = `
+          <span class="rule-suggestion-key">/${rule.keyword}</span>
+          <span class="rule-suggestion-name">${rule.name || 'Sans nom'}</span>
+        `;
+        option.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // Empêche le blur du champ input
+          applyRuleSuggestion(rule);
+        });
+        suggestionsList.appendChild(option);
+      });
+    }
+
+    suggestionsMenu.style.display = 'block';
+  } else {
+    suggestionsMenu.style.display = 'none';
+    selectedSuggestionIndex = -1;
+  }
+});
+
+// Fermer le menu si on clique ailleurs
+document.addEventListener('click', (e) => {
+  if (e.target !== payeeInput && !suggestionsMenu.contains(e.target)) {
+    suggestionsMenu.style.display = 'none';
+  }
+});
+
+// Gestion du clavier (Entrée / Flèches / Échap)
+payeeInput.addEventListener('keydown', (e) => {
+  if (suggestionsMenu.style.display === 'none') return;
+
+  const options = suggestionsList.querySelectorAll('.select-option:not(.select-no-result)');
+  if (options.length === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectedSuggestionIndex = (selectedSuggestionIndex + 1) % options.length;
+    updateSuggestionFocus(options);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectedSuggestionIndex = (selectedSuggestionIndex - 1 + options.length) % options.length;
+    updateSuggestionFocus(options);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const activeOption = options[selectedSuggestionIndex];
+    if (activeOption) {
+      activeOption.dispatchEvent(new Event('mousedown'));
+    }
+  } else if (e.key === 'Escape') {
+    suggestionsMenu.style.display = 'none';
+  }
+});
+
+function updateSuggestionFocus(options) {
+  options.forEach((opt, idx) => {
+    opt.classList.toggle('selected', idx === selectedSuggestionIndex);
+  });
+}
+
+function applyRuleSuggestion(rule) {
+  // 1. Remplir les champs
+  setType(rule.type || 'expense');
+  
+  if (rule.amount_cents > 0) {
+    document.getElementById('op-amount').value = formatMoneyInput(rule.amount_cents);
+  }
+  
+  if (rule.account_id) selectDropdownValue('#op-account', rule.account_id);
+  if (rule.to_account_id) selectDropdownValue('#op-to-account', rule.to_account_id);
+  if (rule.category_id) selectDropdownValue('#op-category', rule.category_id);
+  
+  if (rule.note) document.getElementById('op-note').value = rule.note;
+  
+  // 2. Remplacer le texte tapé par la vraie description de la règle
+  payeeInput.value = rule.payee || '';
+  
+  // 3. Fermer le menu
+  suggestionsMenu.style.display = 'none';
+  payeeInput.focus();
+}
+
+// Fonction utilitaire pour sélectionner une valeur dans un custom-select
+function selectDropdownValue(selector, value) {
+  const select = document.querySelector(selector);
+  if (!select) return;
+  const option = select.querySelector(`.select-option[data-value="${value}"]`);
+  if (option) {
+    selectOption(select, option);
+  }
+}
+
+
 // Menus déroulants personnalisés (custom selects)
 function initCustomSelects() {
   document.querySelectorAll('.custom-select').forEach(select => {
     const trigger = select.querySelector('.select-trigger');
     const menu = select.querySelector('.select-menu');
+
+    if (!trigger || !menu) return; 
 
     // Clic déclencheur : Ouvrir / Fermer
     trigger.onclick = (e) => {
@@ -791,12 +910,17 @@ const modalTitle = opModal.querySelector('h2');
 const modalSubmitBtn = document.getElementById('save-op-btn');
 
 function openCreateModal() {
+  if (document.getElementById('payee-suggestions')) document.getElementById('payee-suggestions').style.display = 'none';
+
   modalMode = 'create';
   editingTransactionId = null;
   modalTitle.innerText = "Nouvelle opération";
   modalSubmitBtn.innerText = "Enregistrer";
 
   opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
   document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('op-amount').value = '';
   document.getElementById('op-payee').value = '';
@@ -820,6 +944,9 @@ function openEditModal(tx) {
   modalSubmitBtn.innerText = "Mettre à jour";
 
   opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
   document.getElementById('op-date').value = tx.date;
   document.getElementById('op-amount').value = (tx.amount_cents / 100).toFixed(2).replace('.', ',');
   document.getElementById('op-payee').value = tx.payee || '';
@@ -841,6 +968,9 @@ function openDuplicateModal(tx) {
   modalSubmitBtn.innerText = "Enregistrer";
 
   opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
   document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('op-amount').value = (tx.amount_cents / 100).toFixed(2).replace('.', ',');
   document.getElementById('op-payee').value = tx.payee || '';
@@ -854,7 +984,47 @@ function openDuplicateModal(tx) {
   setTimeout(() => document.getElementById('op-amount').focus(), 50);
 }
 
-function closeOpModal() { opModal.classList.remove('active'); }
+function openRuleConfigModal(rule, index) {
+  modalMode = 'rule';
+  editingTransactionId = index; // On utilise cette variable pour stocker l'index de la règle
+  modalTitle.innerText = "Configuration de la règle";
+  modalSubmitBtn.innerText = "Sauvegarder";
+
+  opModal.classList.add('active');
+  
+ // Gestion de la date
+  const dateInput = document.getElementById('op-date');
+  const dateLabel = dateInput.parentElement.querySelector('label');
+  dateInput.value = '';
+  dateInput.disabled = true;
+  dateLabel.innerHTML = 'Date <span class="label-hint">(Automatique)</span>';
+
+  // Gestion du montant
+  const amountInput = document.getElementById('op-amount');
+  const amountLabel = amountInput.parentElement.parentElement.querySelector('label');
+  amountInput.value = rule.amount_cents > 0 ? (rule.amount_cents / 100).toFixed(2).replace('.', ',') : '';
+  amountLabel.innerHTML = 'Montant <span class="label-hint">(Optionnel)</span>';
+  
+  setupMoneyInput(amountInput, { allowNegative: false, allowEmpty: true });
+
+  // Remplissage des autres champs
+  document.getElementById('op-payee').value = rule.payee || '';
+  document.getElementById('op-note').value = rule.note || '';
+  setType(rule.type || 'expense');
+
+  // Menus déroulants
+  setupDropdown('#op-account', db.accounts, rule.account_id || db.accounts[0]?.id);
+  setupDropdown('#op-to-account', db.accounts, rule.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
+  setupDropdown('#op-category', db.categories, rule.category_id || db.categories[0]?.id);
+
+  setTimeout(() => amountInput.focus(), 50);
+}
+
+function closeOpModal() { 
+  opModal.classList.remove('active'); 
+  if (document.getElementById('payee-suggestions')) document.getElementById('payee-suggestions').style.display = 'none';
+}
+
 document.getElementById('open-new-op-btn').addEventListener('click', openCreateModal);
 document.getElementById('cancel-modal-btn').addEventListener('click', closeOpModal);
 
@@ -909,8 +1079,11 @@ function setupDropdown(selector, items, defaultId) {
 opForm.addEventListener('submit', async (e) => {
   e.preventDefault();
 
-  const amountCents = parseMoneyInput(document.getElementById('op-amount').value);
-  if (!amountCents || amountCents <= 0) {
+  const amountCents = parseMoneyInput(document.getElementById('op-amount').value) || 0;
+  const isRule = modalMode === 'rule';
+
+  // Si c'est une opération classique, le montant ne peut pas être 0 ou vide
+  if (!isRule && amountCents <= 0) {
     const amountInput = document.getElementById('op-amount');
     amountInput.focus();
     flashInputError(amountInput);
@@ -918,23 +1091,35 @@ opForm.addEventListener('submit', async (e) => {
   }
 
   const txData = {
-    date: document.getElementById('op-date').value,
+    date: isRule ? '' : document.getElementById('op-date').value,
     type: currentOpType,
     payee: document.getElementById('op-payee').value,
     note: document.getElementById('op-note').value,
     account_id: document.querySelector('#op-account').getAttribute('data-value'),
     to_account_id: currentOpType === 'transfer' ? document.querySelector('#op-to-account').getAttribute('data-value') : null,
     category_id: currentOpType === 'transfer' ? null : document.querySelector('#op-category').getAttribute('data-value'),
-    amount_cents: amountCents // Centimes entiers stricts
+    amount_cents: amountCents
   };
 
   // Un virement doit se faire vers un compte différent du compte source
- if (currentOpType === 'transfer' && txData.account_id === txData.to_account_id) {
-    flashInputError(document.querySelector('#op-account .select-trigger'));    // Compte source
-    flashInputError(document.querySelector('#op-to-account .select-trigger')); // Compte destinataire
+  if (currentOpType === 'transfer' && txData.account_id === txData.to_account_id) {
+    flashInputError(document.querySelector('#op-account .select-trigger'));
+    flashInputError(document.querySelector('#op-to-account .select-trigger'));
     return;
   }
 
+  if (isRule) {
+    // --- SAUVEGARDE DE LA RÈGLE ---
+    tempRules[editingTransactionId] = {
+      ...tempRules[editingTransactionId],
+      ...txData
+    };
+    renderSettingsRules();
+    closeOpModal();
+    return;
+  }
+
+  // --- SAUVEGARDE OPÉRATION CLASSIQUE ---
   if (modalMode === 'edit') {
     txData.id = editingTransactionId;
     const updated = await window.tabula.updateTransaction(txData);
@@ -981,7 +1166,8 @@ document.getElementById('confirm-delete-btn').addEventListener('click', async ()
 const settingsModal = document.getElementById('settings-modal');
 const accountsListEl = document.getElementById('settings-accounts-list');
 const categoriesListEl = document.getElementById('settings-categories-list');
-let tempAccounts = [], tempCategories = [];
+const rulesListEl = document.getElementById('settings-rules-list');
+let tempAccounts = [], tempCategories = [], tempRules = [];
 
 let pendingSettingsDeleteType = null;
 let pendingSettingsDeleteIndex = null;
@@ -992,9 +1178,17 @@ function openSettingsDeleteModal(type, index, item) {
   
   const descEl = document.getElementById('settings-delete-desc');
   const countEl = document.getElementById('settings-delete-count');
+
+  if (type === 'rule') {
+    descEl.innerText = "La suppression de cette règle prendra effet lors de l'enregistrement des paramètres.";
+    countEl.style.display = 'none';
+    document.getElementById('settings-delete-modal').classList.add('active');
+    return;
+  }
+
+  countEl.style.display = 'block';
   const label = type === 'account' ? 'ce compte' : 'cette catégorie';
 
-  // Calcul du nombre d'opérations dépendantes
   let linkedCount = 0;
   if (type === 'account') {
     linkedCount = db.transactions.filter(t => t.account_id === item.id || t.to_account_id === item.id).length;
@@ -1011,6 +1205,7 @@ function openSettingsDeleteModal(type, index, item) {
 function openSettingsModal() {
   tempAccounts = JSON.parse(JSON.stringify(db.accounts));
   tempCategories = JSON.parse(JSON.stringify(db.categories));
+  tempRules = JSON.parse(JSON.stringify(db.rules || [])); 
   tempTheme = savedTheme;
   tempDataPath = savedDataPath;
 
@@ -1019,6 +1214,7 @@ function openSettingsModal() {
 
   renderSettingsAccounts();
   renderSettingsCategories();
+  renderSettingsRules();
   resetUpdateView();
 
   const themeSelect = document.getElementById('settings-theme-select');
@@ -1183,6 +1379,132 @@ function renderSettingsCategories() {
 
   setupDragAndDrop(categoriesListEl, tempCategories, renderSettingsCategories);
 }
+
+// Rendu des règles
+function renderSettingsRules() {
+  rulesListEl.innerHTML = '';
+  tempRules.forEach((rule, idx) => {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.setAttribute('data-id', rule.id);
+
+    row.innerHTML = `
+      <div class="settings-name-segment">
+        <input type="text" class="settings-input rule-name-input" value="${rule.name || ''}" placeholder="Nom de la règle">
+        <span class="char-counter">0/12</span>
+      </div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-keyword-segment">
+        <input type="text" class="settings-input rule-keyword-input" value="${rule.keyword ? '/' + rule.keyword : ''}" placeholder="/clé">
+        <span class="char-counter">0/8</span>
+      </div>
+
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn rule-edit-btn" title="Configurer la règle"><svg class="icon"><use href="icons.svg#icon-edit"></use></svg></button>
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
+    `;
+
+    const nameSegment = row.querySelector('.settings-name-segment');
+    const nameInput = row.querySelector('.rule-name-input');
+    setupCharCounter(nameSegment, nameInput, 12, (val) => { rule.name = val; });
+
+    // --- LOGIQUE DU RACCOURCI (avec slash forcé) ---
+    const keywordSegment = row.querySelector('.settings-keyword-segment');
+    const keywordInput = row.querySelector('.rule-keyword-input');
+    const keywordCounter = keywordSegment.querySelector('.char-counter');
+
+    function updateKwDisplay() {
+      const val = keywordInput.value;
+      const len = val.startsWith('/') ? val.length - 1 : val.length;
+      keywordCounter.innerText = `${len}/8`;
+      keywordCounter.classList.toggle('overflow', len > 8);
+    }
+    updateKwDisplay();
+
+    keywordInput.addEventListener('focus', () => {
+      if (!keywordInput.value.startsWith('/')) {
+        keywordInput.value = '/' + keywordInput.value;
+      }
+      updateKwDisplay();
+      keywordInput.setSelectionRange(keywordInput.value.length, keywordInput.value.length);
+    });
+
+    keywordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && keywordInput.value === '/') {
+        e.preventDefault();
+      }
+    });
+
+    keywordInput.addEventListener('input', () => {
+      let val = keywordInput.value;
+      if (!val.startsWith('/')) {
+        val = '/' + val;
+      }
+      val = '/' + val.substring(1).replace(/\//g, '').replace(/\s/g, '').toLowerCase();
+      if (val.length > 9) {
+        val = val.substring(0, 9);
+      }
+      keywordInput.value = val;
+      rule.keyword = val.substring(1);
+      updateKwDisplay();
+    });
+
+    keywordInput.addEventListener('blur', () => {
+      if (keywordInput.value === '/') {
+        keywordInput.value = '';
+        rule.keyword = '';
+      }
+      updateKwDisplay();
+    });
+
+    // --- LES BOUTONS D'ACTION ---
+    row.querySelector('.rule-edit-btn').addEventListener('click', () => {
+      openRuleConfigModal(rule, idx);
+    });
+
+    row.querySelector('.delete-btn').addEventListener('click', () => {
+      openSettingsDeleteModal('rule', idx, rule);
+    });
+
+    rulesListEl.appendChild(row);
+  });
+
+  setupDragAndDrop(rulesListEl, tempRules, renderSettingsRules);
+}
+
+// Validation des règles
+function validateRulesList() {
+  let isValid = true;
+  const keywordCounts = {};
+
+  tempRules.forEach(rule => {
+    const cleanKw = rule.keyword ? rule.keyword.trim().toLowerCase() : '';
+    if (cleanKw) keywordCounts[cleanKw] = (keywordCounts[cleanKw] || 0) + 1;
+  });
+
+  const rows = rulesListEl.querySelectorAll('.settings-row');
+  tempRules.forEach((rule, idx) => {
+    const cleanKw = rule.keyword ? rule.keyword.trim().toLowerCase() : '';
+    const row = rows[idx];
+    
+    // Erreur si le mot clé est vide ou s'il y a un doublon
+    if (cleanKw === '' || keywordCounts[cleanKw] > 1) {
+      isValid = false;
+      flashInputError(row);
+      if (cleanKw === '') {
+        row.querySelector('.rule-keyword-input').focus();
+      }
+    }
+  });
+
+  return isValid;
+}
+
+
 
 
 // Changement de l'organisation
@@ -1477,8 +1799,27 @@ document.getElementById('settings-add-category-btn').addEventListener('click', (
   if (lastRow) setTimeout(() => lastRow.focus(), 20);
 });
 
+// Ajout de règle
+document.getElementById('settings-add-rule-btn').addEventListener('click', () => {
+  tempRules.push({ 
+    id: 'rule_' + crypto.randomUUID(), 
+    name: '', 
+    keyword: '', 
+    type: 'expense', 
+    amount_cents: 0, 
+    account_id: '', 
+    category_id: '', 
+    note: '', 
+    payee: '' 
+  });
+  renderSettingsRules();
+  
+  const lastRow = rulesListEl.querySelector('.settings-row:last-child .rule-name-input');
+  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+});
+
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
-  if (!validateAccountsList() || !validateCategoriesList()) return;
+  if (!validateAccountsList() || !validateCategoriesList() || !validateRulesList()) return;
 
   const finalAccounts = tempAccounts.map(a => ({ ...a, name: a.name.trim() }));
   const finalCategories = tempCategories.map(c => ({ ...c, name: c.name.trim() }));
@@ -1490,6 +1831,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 
   await window.tabula.updateAccounts(finalAccounts);
   await window.tabula.updateCategories(finalCategories);
+  await window.tabula.updateRules(tempRules);
 
   savedTheme = tempTheme;
   localStorage.setItem('tabula-theme', savedTheme);
@@ -1505,6 +1847,7 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
     
     if (currentActivePane?.id === 'tab-accounts' && !validateAccountsList()) return;
     if (currentActivePane?.id === 'tab-categories' && !validateCategoriesList()) return;
+    if (currentActivePane?.id === 'tab-rules' && !validateRulesList()) return;
 
     const externalUrl = tab.getAttribute('data-url');
     if (externalUrl) {
@@ -1583,6 +1926,9 @@ document.getElementById('confirm-settings-delete-btn').addEventListener('click',
   } else if (pendingSettingsDeleteType === 'category') {
     tempCategories.splice(pendingSettingsDeleteIndex, 1);
     renderSettingsCategories();
+  } else if (pendingSettingsDeleteType === 'rule') {
+    tempRules.splice(pendingSettingsDeleteIndex, 1);
+    renderSettingsRules();
   }
 });
 
@@ -1892,6 +2238,8 @@ window.addEventListener('wheel', (e) => {
 
 async function loadApp() {
   db = await window.tabula.getData();
+
+  if (!db.rules) db.rules = [];
 
   applyVisualTheme(savedTheme);
 

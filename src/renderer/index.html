@@ -183,13 +183,13 @@
           <div class="settings-pane" id="tab-rules">
             <div class="pane-header">
               <h3>Règles d'automatisation</h3>
-              <p class="text-muted">Pré-remplissez vos formulaires selon des mots-clés de description.</p>
+              <p class="text-muted">Pré-remplissez vos formulaires selon des mots-clés.</p>
             </div>
-            <div class="settings-wip-card">
-              <svg class="icon icon-illu"><use href="icons.svg#icon-illu-dev"></use></svg>
-              <div class="wip-title">En cours de développement</div>
-              <p class="text-muted">L'auto-complétion intelligente sera disponible prochainement.</p>
-            </div>
+            <div class="settings-list" id="settings-rules-list"></div>
+            <button type="button" class="btn btn-dashed" id="settings-add-rule-btn">
+              <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
+              <span>Ajouter une règle</span>
+            </button>
           </div>
 
           <!-- Onglet données -->
@@ -328,9 +328,16 @@
             <input type="date" id="op-date" class="input-date">
           </div>
         </div>
-        <div class="input-group" id="group-payee">
-          <label>Description</label>
+        <div class="input-group" id="group-payee" style="position: relative;">
+          <label>Description <span class="label-hint">(tapez / pour les règles)</span></label>
           <input type="text" id="op-payee" class="input-text" placeholder="Motif, tiers, période..." autocomplete="off">
+          
+          <!-- Menu d'auto-complétion pour les règles -->
+          <div class="custom-select open" id="payee-suggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; z-index: 10;">
+            <div class="select-menu" style="display: flex; max-height: 200px;">
+              <!-- Les options seront injectées ici par le JS -->
+            </div>
+          </div>
         </div>
         <div class="form-row">
           <div class="input-group">
