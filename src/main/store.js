@@ -223,6 +223,26 @@ function updateAccounts(newAccounts) {
   return data.accounts;
 }
 
+function updateRecurrences(newRecurrences) {
+  const data = readData();
+  data.recurrences = newRecurrences;
+  writeData(data);
+  return data.recurrences;
+}
+
+function updatePendingRecurrences(newPending) {
+  const data = readData();
+  data.pending_recurrences = newPending;
+  writeData(data);
+  return data.pending_recurrences;
+}
+
+function updateLastOpened(dateIsoString) {
+  const data = readData();
+  data.last_opened = dateIsoString;
+  writeData(data);
+}
+
 function updateRules(newRules) {
   const data = readData();
   data.rules = newRules;
@@ -244,5 +264,8 @@ module.exports = {
   deleteTransaction,
   updateCategories,
   updateAccounts,
+  updateRecurrences,
+  updatePendingRecurrences,
+  updateLastOpened,
   updateRules
 };

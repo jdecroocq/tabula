@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('tabula', {
   deleteTransaction: (id) => ipcRenderer.invoke('db:delete-transaction', id),
   updateCategories: (cats) => ipcRenderer.invoke('db:update-categories', cats),
   updateAccounts: (accs) => ipcRenderer.invoke('db:update-accounts', accs),
+  updateRecurrences: (recs) => ipcRenderer.invoke('db:update-recurrences', recs),
+  updatePendingRecurrences: (pends) => ipcRenderer.invoke('db:update-pending-recurrences', pends),
   updateRules: (rules) => ipcRenderer.invoke('db:update-rules', rules),
   resetData: () => ipcRenderer.invoke('db:reset-data'),
   getDataPath: () => ipcRenderer.invoke('db:get-data-path'),

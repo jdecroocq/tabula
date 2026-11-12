@@ -2,7 +2,15 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 
 let globalAppVersion = '';
 
-let db = { accounts: [], categories: [], transactions: [], rules: [] };
+let db = { 
+  accounts: [], 
+  categories: [], 
+  transactions: [], 
+  rules: [], 
+  recurrences: [], 
+  pending_recurrences: [], 
+  last_opened: null 
+};
 let searchQuery = '';
 let currentOpType = 'expense';
 
@@ -12,6 +20,8 @@ let modalMode = 'create';
 let editingTransactionId = null;
 let deletingTransactionId = null;
 let contextMenuTxId = null;
+
+let editingRecurrenceIndex = null;
 
 // ======================================================================
 // OUTILS GÉNÉRIQUES
@@ -193,6 +203,11 @@ const suggestionsList = suggestionsMenu.querySelector('.select-menu');
 let selectedSuggestionIndex = -1;
 
 payeeInput.addEventListener('input', () => {
+  if (modalMode === 'rule') {
+    suggestionsMenu.style.display = 'none';
+    return; // On ne fait rien si on configure une règle
+  }
+  
   const val = payeeInput.value;
   
   // Si ça commence par / et qu'il n'y a pas d'espace, on affiche le menu
@@ -237,6 +252,7 @@ document.addEventListener('click', (e) => {
 
 // Gestion du clavier (Entrée / Flèches / Échap)
 payeeInput.addEventListener('keydown', (e) => {
+  if (modalMode === 'rule') return;
   if (suggestionsMenu.style.display === 'none') return;
 
   const options = suggestionsList.querySelectorAll('.select-option:not(.select-no-result)');
@@ -739,7 +755,6 @@ function renderTransactions() {
 
   // Recherche globale
   if (searchQuery) {
-    // Découpe la recherche en mots individuels sans accents
     const queryTokens = normalizeSearchText(searchQuery).split(/\s+/).filter(t => t.length > 0);
 
     list = list.filter(tx => {
@@ -747,7 +762,6 @@ function renderTransactions() {
       const account = db.accounts.find(a => a.id === tx.account_id);
       const toAccount = tx.to_account_id ? db.accounts.find(a => a.id === tx.to_account_id) : null;
 
-      // Crée une "super-chaîne" contenant tout ce qui concerne cette opération
       const fullRowText = [
         tx.payee,
         tx.note,
@@ -762,8 +776,6 @@ function renderTransactions() {
       ].join(' ');
 
       const normalizedRow = normalizeSearchText(fullRowText);
-
-      // ET logique
       return queryTokens.every(token => normalizedRow.includes(token));
     });
   }
@@ -813,13 +825,11 @@ function renderTransactions() {
       amountClass = 'negative';
       sign = '- ';
     } else if (tx.type === 'transfer') {
-      // Libellé "vers" pour les virements
       const fromName = account ? account.name : '--';
       const toName = toAccount ? toAccount.name : '--';
       accountDisplay = `${fromName} vers ${toName}`;
     }
 
-    // Gestion du texte de commentaire
     const hasNote = tx.note && tx.note.trim() !== '';
     const noteContent = hasNote ? tx.note : 'Aucun commentaire';
     const noteClass = hasNote ? 'note-text' : 'note-text empty-note';
@@ -837,12 +847,10 @@ function renderTransactions() {
       <td class="amount ${amountClass}" style="text-align: right;">${sign}${formatMoney(tx.amount_cents)}</td>
     `;
 
-    // Déplier
     tr.addEventListener('click', () => {
       tr.classList.toggle('expanded');
     });
 
-    // Clic droit i.e. menu contextuel
     tr.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openContextMenu(e.clientX, e.clientY, tx.id);
@@ -917,6 +925,8 @@ function openCreateModal() {
   modalTitle.innerText = "Nouvelle opération";
   modalSubmitBtn.innerText = "Enregistrer";
 
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>'
+
   opModal.classList.add('active');
   document.getElementById('op-date').disabled = false;
   document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
@@ -943,6 +953,8 @@ function openEditModal(tx) {
   modalTitle.innerText = "Modifier l'opération";
   modalSubmitBtn.innerText = "Mettre à jour";
 
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>'
+
   opModal.classList.add('active');
   document.getElementById('op-date').disabled = false;
   document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
@@ -967,6 +979,8 @@ function openDuplicateModal(tx) {
   modalTitle.innerText = "Nouvelle opération";
   modalSubmitBtn.innerText = "Enregistrer";
 
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>'
+
   opModal.classList.add('active');
   document.getElementById('op-date').disabled = false;
   document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
@@ -984,11 +998,55 @@ function openDuplicateModal(tx) {
   setTimeout(() => document.getElementById('op-amount').focus(), 50);
 }
 
+function openRecurrenceOpModal(rec, index) {
+  modalMode = 'recurrence';
+  editingRecurrenceIndex = index; // On réutilise la variable globale
+  modalTitle.innerText = "Configuration de l'opération";
+  modalSubmitBtn.innerText = "Sauvegarder";
+
+  opModal.classList.add('active');
+  const suggestions = document.getElementById('payee-suggestions');
+  if (suggestions) suggestions.style.display = 'none';
+
+  // Gestion de la date (grisée, gérée par la fréquence)
+  const dateInput = document.getElementById('op-date');
+  const dateLabel = dateInput.parentElement.querySelector('label');
+  dateInput.value = ''; // On laisse vide ou on met la date du jour pour l'exemple
+  dateInput.disabled = true;
+  dateLabel.innerHTML = 'Date <span class="label-hint">(Gérée par la fréquence)</span>';
+
+  // Gestion du montant
+  const amountInput = document.getElementById('op-amount');
+  const amountLabel = amountInput.parentElement.parentElement.querySelector('label');
+  amountInput.value = rec.amount_cents > 0 ? formatMoneyInput(rec.amount_cents) : '';
+  amountLabel.innerHTML = 'Montant';
+
+  // Label description (pas d'auto-complétion de règles ici)
+  document.querySelector('#group-payee label').innerHTML = 'Description';
+
+  setupMoneyInput(amountInput, { allowNegative: false, allowEmpty: false });
+
+  // Remplissage des autres champs
+  document.getElementById('op-payee').value = rec.payee || '';
+  document.getElementById('op-note').value = rec.note || '';
+  setType(rec.type || 'expense');
+
+  // Menus déroulants
+  setupDropdown('#op-account', db.accounts, rec.account_id || db.accounts[0]?.id);
+  setupDropdown('#op-to-account', db.accounts, rec.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
+  setupDropdown('#op-category', db.categories, rec.category_id || db.categories[0]?.id);
+
+  setTimeout(() => amountInput.focus(), 50);
+}
+
+
 function openRuleConfigModal(rule, index) {
   modalMode = 'rule';
   editingTransactionId = index; // On utilise cette variable pour stocker l'index de la règle
-  modalTitle.innerText = "Configuration de la règle";
+  modalTitle.innerText = "Configuration de l'opération";
   modalSubmitBtn.innerText = "Sauvegarder";
+
+  document.querySelector('#group-payee label').innerHTML = 'Description';
 
   opModal.classList.add('active');
   
@@ -1020,9 +1078,11 @@ function openRuleConfigModal(rule, index) {
   setTimeout(() => amountInput.focus(), 50);
 }
 
-function closeOpModal() { 
-  opModal.classList.remove('active'); 
-  if (document.getElementById('payee-suggestions')) document.getElementById('payee-suggestions').style.display = 'none';
+function closeOpModal() {
+  opModal.classList.remove('active');
+  const suggestions = document.getElementById('payee-suggestions');
+  if (suggestions) suggestions.style.display = 'none';
+  editingRecurrenceIndex = null;
 }
 
 document.getElementById('open-new-op-btn').addEventListener('click', openCreateModal);
@@ -1081,9 +1141,10 @@ opForm.addEventListener('submit', async (e) => {
 
   const amountCents = parseMoneyInput(document.getElementById('op-amount').value) || 0;
   const isRule = modalMode === 'rule';
+  const isRecurrence = modalMode === 'recurrence';
 
-  // Si c'est une opération classique, le montant ne peut pas être 0 ou vide
-  if (!isRule && amountCents <= 0) {
+  // Si c'est une opération classique OU une récurrence, le montant ne peut pas être 0 ou vide
+  if ((!isRule && !isRecurrence && amountCents <= 0) || (isRecurrence && amountCents <= 0)) {
     const amountInput = document.getElementById('op-amount');
     amountInput.focus();
     flashInputError(amountInput);
@@ -1091,7 +1152,7 @@ opForm.addEventListener('submit', async (e) => {
   }
 
   const txData = {
-    date: isRule ? '' : document.getElementById('op-date').value,
+    date: (isRule || isRecurrence) ? '' : document.getElementById('op-date').value,
     type: currentOpType,
     payee: document.getElementById('op-payee').value,
     note: document.getElementById('op-note').value,
@@ -1108,13 +1169,24 @@ opForm.addEventListener('submit', async (e) => {
     return;
   }
 
+  // --- SAUVEGARDE RÈGLE ---
   if (isRule) {
-    // --- SAUVEGARDE DE LA RÈGLE ---
     tempRules[editingTransactionId] = {
       ...tempRules[editingTransactionId],
       ...txData
     };
     renderSettingsRules();
+    closeOpModal();
+    return;
+  }
+
+  // --- SAUVEGARDE RÉCURRENCE ---
+  if (isRecurrence) {
+    tempRecurrences[editingRecurrenceIndex] = {
+      ...tempRecurrences[editingRecurrenceIndex],
+      ...txData
+    };
+    renderSettingsRecurrences();
     closeOpModal();
     return;
   }
@@ -1167,7 +1239,8 @@ const settingsModal = document.getElementById('settings-modal');
 const accountsListEl = document.getElementById('settings-accounts-list');
 const categoriesListEl = document.getElementById('settings-categories-list');
 const rulesListEl = document.getElementById('settings-rules-list');
-let tempAccounts = [], tempCategories = [], tempRules = [];
+const recurrencesListEl = document.getElementById('settings-recurrences-list');
+let tempAccounts = [], tempCategories = [], tempRules = [], tempRecurrences = [];
 
 let pendingSettingsDeleteType = null;
 let pendingSettingsDeleteIndex = null;
@@ -1179,8 +1252,8 @@ function openSettingsDeleteModal(type, index, item) {
   const descEl = document.getElementById('settings-delete-desc');
   const countEl = document.getElementById('settings-delete-count');
 
-  if (type === 'rule') {
-    descEl.innerText = "La suppression de cette règle prendra effet lors de l'enregistrement des paramètres.";
+  if (type === 'rule' || type === 'recurrence') {
+    descEl.innerText = "La suppression de cet élément prendra effet lors de l'enregistrement des paramètres.";
     countEl.style.display = 'none';
     document.getElementById('settings-delete-modal').classList.add('active');
     return;
@@ -1206,6 +1279,7 @@ function openSettingsModal() {
   tempAccounts = JSON.parse(JSON.stringify(db.accounts));
   tempCategories = JSON.parse(JSON.stringify(db.categories));
   tempRules = JSON.parse(JSON.stringify(db.rules || [])); 
+  tempRecurrences = JSON.parse(JSON.stringify(db.recurrences || []));
   tempTheme = savedTheme;
   tempDataPath = savedDataPath;
 
@@ -1214,6 +1288,7 @@ function openSettingsModal() {
 
   renderSettingsAccounts();
   renderSettingsCategories();
+  renderSettingsRecurrences();
   renderSettingsRules();
   resetUpdateView();
 
@@ -1379,6 +1454,162 @@ function renderSettingsCategories() {
 
   setupDragAndDrop(categoriesListEl, tempCategories, renderSettingsCategories);
 }
+
+// Rendu des récurrences
+function renderSettingsRecurrences() {
+  recurrencesListEl.innerHTML = '';
+  tempRecurrences.forEach((rec, idx) => {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.setAttribute('data-id', rec.id);
+
+    row.innerHTML = `
+      <div class="settings-name-segment">
+        <input type="text" class="settings-input rec-name-input" value="${rec.name || ''}" placeholder="Nom de la récurrence">
+      </div>
+
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn rec-calendar-btn" title="Configurer la fréquence"><svg class="icon"><use href="icons.svg#icon-calendar"></use></svg></button>
+        <button type="button" class="settings-row-btn rec-edit-op-btn" title="Modifier l'opération"><svg class="icon"><use href="icons.svg#icon-edit"></use></svg></button>
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
+    `;
+
+    // Remplacement du compteur de caractères par une simple mise à jour
+    const nameInput = row.querySelector('.rec-name-input');
+    nameInput.addEventListener('input', () => {
+      rec.name = nameInput.value;
+    });
+
+    // Bouton Calendrier
+    row.querySelector('.rec-calendar-btn').addEventListener('click', () => {
+      openFreqModal(rec, idx);
+    });
+
+    // Bouton Modifier l'opération (Crayon)
+    row.querySelector('.rec-edit-op-btn').addEventListener('click', () => {
+      openRecurrenceOpModal(rec, idx);
+    });
+
+    // Bouton Supprimer
+    row.querySelector('.delete-btn').addEventListener('click', () => {
+      openSettingsDeleteModal('recurrence', idx, rec);
+    });
+
+    recurrencesListEl.appendChild(row);
+  });
+
+  setupDragAndDrop(recurrencesListEl, tempRecurrences, renderSettingsRecurrences);
+}
+
+// ======================================================================
+// MODALE DE FRÉQUENCE
+// ======================================================================
+
+const freqModal = document.getElementById('freq-modal');
+const freqTypeSelect = document.getElementById('freq-type-select');
+const freqDayOfWeekSelect = document.getElementById('freq-day-of-week');
+
+// Fonction utilitaire pour remplir un custom-select
+function populateSelect(selectId, min, max, defaultValue) {
+  const selectEl = document.getElementById(selectId);
+  const menuEl = selectEl.querySelector('.select-menu');
+  const labelEl = selectEl.querySelector('.select-label');
+  
+  menuEl.innerHTML = '';
+  for (let i = min; i <= max; i++) {
+    const isSelected = i === defaultValue;
+    if (isSelected) labelEl.innerText = i;
+    menuEl.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${i}">${i}</div>`;
+  }
+}
+
+const MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+function populateMonthSelect(selectId, defaultValue) {
+  const selectEl = document.getElementById(selectId);
+  const menuEl = selectEl.querySelector('.select-menu');
+  const labelEl = selectEl.querySelector('.select-label');
+  
+  menuEl.innerHTML = '';
+  MONTHS_FR.forEach((month, idx) => {
+    const isSelected = idx === defaultValue;
+    if (isSelected) labelEl.innerText = month;
+    menuEl.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${idx}">${month}</div>`;
+  });
+}
+
+function openFreqModal(rec, index) {
+  editingRecurrenceIndex = index;
+  
+  const freq = rec.frequency || { type: 'monthly', day: 1 };
+
+  // 1. Remplir les listes déroulantes (seulement la première fois ou à chaque ouverture)
+  populateSelect('freq-day-of-month', 1, 31, freq.day || 1);
+  populateSelect('freq-day-of-year', 1, 31, freq.day || 1);
+  populateMonthSelect('freq-month-of-year', freq.month || 0);
+
+  // 2. Initialiser les nouveaux menus déroulants
+  initCustomSelects();
+
+  // 3. Sélectionner les bonnes valeurs
+  const typeOption = freqTypeSelect.querySelector(`.select-option[data-value="${freq.type}"]`);
+  if (typeOption) selectOption(freqTypeSelect, typeOption);
+
+  if (freq.type === 'yearly') {
+    const dayOpt = document.getElementById('freq-day-of-year').querySelector(`.select-option[data-value="${freq.day || 1}"]`);
+    if (dayOpt) selectOption(document.getElementById('freq-day-of-year'), dayOpt);
+    const monthOpt = document.getElementById('freq-month-of-year').querySelector(`.select-option[data-value="${freq.month || 0}"]`);
+    if (monthOpt) selectOption(document.getElementById('freq-month-of-year'), monthOpt);
+  } else if (freq.type === 'weekly') {
+    const dayOption = freqDayOfWeekSelect.querySelector(`.select-option[data-value="${freq.day !== undefined ? freq.day : 1}"]`);
+    if (dayOption) selectOption(freqDayOfWeekSelect, dayOption);
+  } else if (freq.type === 'monthly') {
+    const dayOpt = document.getElementById('freq-day-of-month').querySelector(`.select-option[data-value="${freq.day || 1}"]`);
+    if (dayOpt) selectOption(document.getElementById('freq-day-of-month'), dayOpt);
+  }
+
+  updateFreqFields(freq.type);
+  freqModal.classList.add('active');
+}
+
+function updateFreqFields(type) {
+  document.getElementById('freq-monthly-fields').style.display = type === 'monthly' ? 'flex' : 'none';
+  document.getElementById('freq-yearly-fields').style.display = type === 'yearly' ? 'flex' : 'none';
+  document.getElementById('freq-weekly-fields').style.display = type === 'weekly' ? 'flex' : 'none';
+}
+
+freqTypeSelect.addEventListener('change', (e) => {
+  updateFreqFields(e.detail.value);
+});
+
+document.getElementById('cancel-freq-btn').addEventListener('click', () => {
+  freqModal.classList.remove('active');
+});
+
+document.getElementById('save-freq-btn').addEventListener('click', () => {
+  if (editingRecurrenceIndex === null) return;
+
+  const type = freqTypeSelect.getAttribute('data-value');
+  let frequency = { type };
+
+  if (type === 'monthly') {
+    const day = parseInt(document.getElementById('freq-day-of-month').getAttribute('data-value')) || 1;
+    frequency.day = day;
+  } else if (type === 'yearly') {
+    const day = parseInt(document.getElementById('freq-day-of-year').getAttribute('data-value')) || 1;
+    const month = parseInt(document.getElementById('freq-month-of-year').getAttribute('data-value')) || 0;
+    frequency.day = day;
+    frequency.month = month;
+  } else if (type === 'weekly') {
+    const day = parseInt(freqDayOfWeekSelect.getAttribute('data-value'));
+    frequency.day = day;
+  }
+
+  tempRecurrences[editingRecurrenceIndex].frequency = frequency;
+  renderSettingsRecurrences();
+  freqModal.classList.remove('active');
+});
 
 // Rendu des règles
 function renderSettingsRules() {
@@ -1799,6 +2030,24 @@ document.getElementById('settings-add-category-btn').addEventListener('click', (
   if (lastRow) setTimeout(() => lastRow.focus(), 20);
 });
 
+document.getElementById('settings-add-recurrence-btn').addEventListener('click', () => {
+  tempRecurrences.push({ 
+    id: 'rec_' + crypto.randomUUID(), 
+    name: '', 
+    frequency: { type: 'monthly', day: 1 }, // Valeur par défaut pour que ça s'affiche
+    type: 'expense',
+    amount_cents: 0,
+    account_id: '',
+    category_id: '',
+    payee: '',
+    note: ''
+  });
+  renderSettingsRecurrences();
+  
+  const lastRow = recurrencesListEl.querySelector('.settings-row:last-child .rec-name-input');
+  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+});
+
 // Ajout de règle
 document.getElementById('settings-add-rule-btn').addEventListener('click', () => {
   tempRules.push({ 
@@ -1832,6 +2081,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   await window.tabula.updateAccounts(finalAccounts);
   await window.tabula.updateCategories(finalCategories);
   await window.tabula.updateRules(tempRules);
+  await window.tabula.updateRecurrences(tempRecurrences);
 
   savedTheme = tempTheme;
   localStorage.setItem('tabula-theme', savedTheme);
@@ -1929,6 +2179,9 @@ document.getElementById('confirm-settings-delete-btn').addEventListener('click',
   } else if (pendingSettingsDeleteType === 'rule') {
     tempRules.splice(pendingSettingsDeleteIndex, 1);
     renderSettingsRules();
+  } else if (pendingSettingsDeleteType === 'recurrence') {
+    tempRecurrences.splice(pendingSettingsDeleteIndex, 1);
+    renderSettingsRecurrences();
   }
 });
 
@@ -2188,6 +2441,7 @@ document.addEventListener('keydown', (e) => {
       { id: 'wip-modal', closeFn: () => document.getElementById('wip-modal').classList.remove('active') },
       { id: 'new-db-modal', closeFn: () => document.getElementById('new-db-modal').classList.remove('active') },
       { id: 'operation-modal', closeFn: closeOpModal },
+      { id: 'freq-modal', closeFn: () => freqModal.classList.remove('active') },
       { id: 'settings-modal', closeFn: closeSettingsModal }
     ];
 
@@ -2278,11 +2532,175 @@ async function loadApp() {
   initCustomSelects();
   renderBalanceCarousel();
   renderTransactions();
+  renderPendingRecurrences();
 }
 
 
 document.getElementById('close-missing-file-btn')?.addEventListener('click', () => {
   document.getElementById('missing-file-modal')?.classList.remove('active');
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ======================================================================
+// GESTION DES RÉCURRENCES EN ATTENTE (ACCUEIL)
+// ======================================================================
+function renderPendingRecurrences() {
+  const panel = document.getElementById('recurrences-panel');
+  const list = document.getElementById('recurrences-list');
+  const countText = document.getElementById('recurrences-count-text');
+  
+  const pending = db.pending_recurrences || [];
+
+  // Si vide, on cache le panneau
+  if (pending.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  // Sinon on l'affiche
+  panel.style.display = 'flex';
+
+  // --- LOGIQUE D'AFFICHAGE (MODE 1 ou PLUSIEURS) ---
+  const titleEl = panel.querySelector('.summary-text h3');
+  const iconEl = panel.querySelector('.recurrences-summary .icon-illu');
+  const footerEl = panel.querySelector('.recurrences-footer');
+
+  if (pending.length === 1) {
+    panel.classList.add('mode-single');
+    titleEl.innerText = "Opération à valider";
+    countText.innerText = "1 suggestion de récurrence à confirmer.";
+    if (iconEl) iconEl.style.display = 'none';
+    if (footerEl) footerEl.style.display = 'none';
+  } else {
+    panel.classList.remove('mode-single');
+    titleEl.innerText = "Opérations à valider";
+    countText.innerText = `${pending.length} suggestions de récurrences à confirmer.`;
+    if (iconEl) iconEl.style.display = 'block';
+    if (footerEl) footerEl.style.display = 'flex';
+  }
+
+  list.innerHTML = '';
+
+  // --- GÉNÉRATION DES LIGNES ---
+  pending.forEach(item => {
+    const isIncome = item.type === 'income';
+    const sign = isIncome ? '+ ' : '- ';
+    const amountClass = isIncome ? 'positive' : 'negative';
+    
+    const row = document.createElement('div');
+    row.className = 'recurrence-row';
+
+    row.innerHTML = `
+      <div class="recurrence-info">
+        <div class="recurrence-title" title="${item.payee || 'Sans description'}">
+          ${item.payee || 'Sans description'}
+        </div>
+        <div class="recurrence-meta">${formatDate(item.date)}</div>
+      </div>
+      <div class="recurrence-amount ${amountClass}">
+        ${sign}${formatMoney(item.amount_cents)}
+      </div>
+      <div class="recurrence-buttons">
+        <button type="button" class="btn btn-square btn-ignore-single" title="Ignorer">
+          <svg class="icon"><use href="icons.svg#icon-close"></use></svg>
+        </button>
+        <button type="button" class="btn btn-square btn-validate-single" title="Valider">
+          <svg class="icon"><use href="icons.svg#icon-check"></use></svg>
+        </button>
+      </div>
+    `;
+
+    // --- ACTION : IGNORER UNE LIGNE ---
+    row.querySelector('.btn-ignore-single').addEventListener('click', async () => {
+      // 1. On retire l'élément de la liste en mémoire
+      db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
+      
+      // 2. On sauvegarde la nouvelle liste vide ou réduite en DB
+      await window.tabula.updatePendingRecurrences(db.pending_recurrences);
+      
+      // 3. On met à jour l'interface
+      renderPendingRecurrences();
+    });
+
+    // --- ACTION : VALIDER UNE LIGNE ---
+    row.querySelector('.btn-validate-single').addEventListener('click', async () => {
+      // 1. On prépare la transaction (on retire l'ID de récurrence)
+      const newTx = { ...item };
+      delete newTx.recurrence_id;
+      
+      // 2. On l'ajoute à la vraie base de données
+      const saved = await window.tabula.addTransaction(newTx);
+      
+      // 3. On l'ajoute à la liste en mémoire des transactions
+      db.transactions.unshift(saved);
+
+      // 4. On retire l'élément de la liste d'attente
+      db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
+      
+      // 5. On sauvegarde la nouvelle liste d'attente en DB
+      await window.tabula.updatePendingRecurrences(db.pending_recurrences);
+
+      // 6. On met à jour toutes les interfaces (panneau, tableau, soldes)
+      renderPendingRecurrences();
+      renderTransactions();
+      renderBalanceCarousel();
+    });
+
+    list.appendChild(row);
+  });
+
+  // --- BOUTONS GLOBAUX (Si > 1 opération) ---
+  if (pending.length > 1) {
+    // ACTION : TOUT IGNORER
+    document.getElementById('btn-ignore-all').onclick = async () => {
+      db.pending_recurrences = [];
+      await window.tabula.updatePendingRecurrences([]);
+      renderPendingRecurrences();
+    };
+
+    // ACTION : TOUT VALIDER
+    document.getElementById('btn-validate-all').onclick = async () => {
+      // On boucle sur toutes les opérations en attente
+      for (const item of pending) {
+        const newTx = { ...item };
+        delete newTx.recurrence_id;
+        
+        // On ajoute chaque transaction à la DB
+        const saved = await window.tabula.addTransaction(newTx);
+        db.transactions.unshift(saved);
+      }
+      
+      // Une fois toutes ajoutées, on vide la liste d'attente
+      db.pending_recurrences = [];
+      await window.tabula.updatePendingRecurrences([]);
+      
+      // On met à jour toutes les interfaces
+      renderPendingRecurrences();
+      renderTransactions();
+      renderBalanceCarousel();
+    };
+  }
+}
+
+
+
+
+
+
+
+
+
+
 
 loadApp();

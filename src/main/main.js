@@ -44,6 +44,9 @@ app.whenReady().then(() => {
   ipcMain.handle('db:delete-transaction', async (e, id) => store.deleteTransaction(id));
   ipcMain.handle('db:update-categories', async (e, cats) => store.updateCategories(cats));
   ipcMain.handle('db:update-accounts', async (e, accs) => store.updateAccounts(accs));
+  ipcMain.handle('db:update-recurrences', async (e, recs) => store.updateRecurrences(recs));
+  ipcMain.handle('db:update-pending-recurrences', async (e, pends) => store.updatePendingRecurrences(pends));
+  ipcMain.handle('db:update-last-opened', async (e, date) => store.updateLastOpened(date));
   ipcMain.handle('db:update-rules', async (e, rules) => store.updateRules(rules));
   ipcMain.handle('db:reset-data', async () => store.resetToDefault());
 
