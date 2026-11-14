@@ -2,14 +2,14 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 
 let globalAppVersion = '';
 
-let db = { 
-  accounts: [], 
-  categories: [], 
-  transactions: [], 
-  rules: [], 
-  recurrences: [], 
-  pending_recurrences: [], 
-  last_opened: null 
+let db = {
+  accounts: [],
+  categories: [],
+  transactions: [],
+  rules: [],
+  recurrences: [],
+  pending_recurrences: [],
+  last_opened: null
 };
 let searchQuery = '';
 let currentOpType = 'expense';
@@ -25,11 +25,6 @@ let editingRecurrenceIndex = null;
 let savedDataPath = '';
 let tempDataPath = '';
 
-
-// ======================================================================
-// MOTEUR DE CALCUL DES RÉCURRENCES
-// ======================================================================
-
 function getOccurrencesBetween(startDateStr, endDateStr, frequency) {
   const occurrences = [];
   const start = new Date(startDateStr + 'T12:00:00');
@@ -38,19 +33,19 @@ function getOccurrencesBetween(startDateStr, endDateStr, frequency) {
   if (isNaN(start) || isNaN(end) || start >= end) return occurrences;
 
   let current = new Date(start);
-  current.setDate(current.getDate() + 1); // On commence le lendemain
+  current.setDate(current.getDate() + 1);
 
   while (current <= end) {
     let isMatch = false;
 
     if (frequency.type === 'weekly') {
       if (current.getDay() === frequency.day) isMatch = true;
-    } 
+    }
     else if (frequency.type === 'monthly') {
       const lastDayOfMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
       const targetDay = Math.min(frequency.day, lastDayOfMonth);
       if (current.getDate() === targetDay) isMatch = true;
-    } 
+    }
     else if (frequency.type === 'yearly') {
       if (current.getMonth() === frequency.month && current.getDate() === frequency.day) {
         isMatch = true;
@@ -78,7 +73,7 @@ function getOccurrencesBetween(startDateStr, endDateStr, frequency) {
 async function checkRecurrences() {
   const now = new Date();
   const nowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  
+
   if (!db.last_opened) {
     await window.tabula.updateLastOpened(nowStr);
     db.last_opened = nowStr;
@@ -91,10 +86,10 @@ async function checkRecurrences() {
 
   db.recurrences.forEach(rec => {
     const dates = getOccurrencesBetween(db.last_opened, nowStr, rec.frequency);
-    
+
     dates.forEach(dateStr => {
       const alreadyPending = newPending.some(p => p.recurrence_id === rec.id && p.date === dateStr);
-      
+
       if (!alreadyPending) {
         newPending.push({
           id: 'pend_' + crypto.randomUUID(),
@@ -121,12 +116,6 @@ async function checkRecurrences() {
   db.last_opened = nowStr;
 }
 
-
-// ======================================================================
-// OUTILS GÉNÉRIQUES
-// ======================================================================
-
-// Formatage
 function formatMoney(cents) {
   return new Intl.NumberFormat('fr-FR', {
     style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2
@@ -139,7 +128,6 @@ function formatDate(isoDate) {
   return `${day}/${month}/${year}`;
 }
 
-// Échappement HTML pour tout ce qui est injecté dans un innerHTML
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -149,7 +137,6 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-// Recherche : normalisation du texte (accents, casse)
 function normalizeSearchText(str) {
   if (!str) return '';
   return str
@@ -160,24 +147,21 @@ function normalizeSearchText(str) {
     .trim();
 }
 
-// Retour visuel bref sur un champ en erreur (bordure rouge le temps d'un instant)
 function flashInputError(el) {
   if (!el) return;
   el.classList.add('input-error');
   setTimeout(() => el.classList.remove('input-error'), 900);
 }
 
-// Saisie monétaire (formatage et validation des champs montant)
 function parseMoneyInput(raw) {
   if (typeof raw === 'number') return Math.round(raw);
   if (!raw) return null;
 
-  // Supprime les espaces et remplace la virgule par un point
   const clean = raw.toString().replace(/\s/g, '').replace(',', '.');
   const num = parseFloat(clean);
 
   if (isNaN(num)) return null;
-  return Math.round(num * 100); // Retourne un entier de centimes
+  return Math.round(num * 100);
 }
 
 function formatMoneyInput(cents) {
@@ -257,7 +241,6 @@ function setupMoneyInput(input, options = { allowNegative: false, allowEmpty: fa
   });
 }
 
-// Compteur universel de caractères (rejette la saisie en cas de dépassement)
 function setupCharCounter(segmentEl, inputEl, maxLimit, onCommit) {
   const counterEl = segmentEl.querySelector('.char-counter');
   inputEl._previousValidText = inputEl.value;
@@ -278,7 +261,7 @@ function setupCharCounter(segmentEl, inputEl, maxLimit, onCommit) {
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      inputEl.blur(); // Déclenche la validation
+      inputEl.blur();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       inputEl.value = inputEl._previousValidText;
@@ -289,11 +272,9 @@ function setupCharCounter(segmentEl, inputEl, maxLimit, onCommit) {
   inputEl.addEventListener('blur', () => {
     const cleanText = inputEl.value.trim();
 
-    // Si la saisie dépasse la limite OU est vide -> REJET et RESTAURATION
     if (inputEl.value.length > maxLimit || cleanText === '') {
       inputEl.value = inputEl._previousValidText;
     } else {
-      // Saisie valide -> enregistrement
       inputEl._previousValidText = cleanText;
       inputEl.value = cleanText;
       onCommit(cleanText);
@@ -302,11 +283,6 @@ function setupCharCounter(segmentEl, inputEl, maxLimit, onCommit) {
   });
 }
 
-
-// ======================================================================
-// MENUS DÉROULANTS PERSONNALISÉS (CUSTOM SELECTS)
-// ======================================================================
-// Fonction utilitaire pour sélectionner une valeur dans un custom-select
 function selectDropdownValue(selector, value) {
   const select = document.querySelector(selector);
   if (!select) return;
@@ -316,23 +292,19 @@ function selectDropdownValue(selector, value) {
   }
 }
 
-// Menus déroulants personnalisés (custom selects)
 function initCustomSelects() {
   document.querySelectorAll('.custom-select').forEach(select => {
     const trigger = select.querySelector('.select-trigger');
     const menu = select.querySelector('.select-menu');
 
-    if (!trigger || !menu) return; 
+    if (!trigger || !menu) return;
 
-    // Clic déclencheur : Ouvrir / Fermer
     trigger.onclick = (e) => {
-      // Si on clique dans l'input alors que le menu est déjà ouvert, on ne referme pas !
       if (e.target.classList.contains('select-search-input')) return;
 
       e.stopPropagation();
       const isOpen = select.classList.contains('open');
 
-      // Ferme tous les autres menus ouverts
       document.querySelectorAll('.custom-select.open').forEach(s => {
         if (s !== select) closeCustomSelect(s);
       });
@@ -344,7 +316,6 @@ function initCustomSelects() {
       }
     };
 
-    // Clic sur une option
     menu.onclick = (e) => {
       const option = e.target.closest('.select-option');
       if (!option || option.classList.contains('select-no-result')) return;
@@ -355,7 +326,6 @@ function initCustomSelects() {
   });
 }
 
-// Ouvre le menu en injectant un vrai input natif
 function openCustomSelect(select) {
   select.classList.add('open');
 
@@ -363,13 +333,10 @@ function openCustomSelect(select) {
   const label = select.querySelector('.select-label');
   const menu = select.querySelector('.select-menu');
 
-  // Mémorise le texte d'origine pour pouvoir l'annuler si besoin
   select._originalText = label ? label.innerText : '';
 
-  // Masque le texte fixe
   if (label) label.style.display = 'none';
 
-  // Crée et injecte un vrai <input> natif dans le DOM
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'select-search-input';
@@ -377,22 +344,17 @@ function openCustomSelect(select) {
   input.autocomplete = 'off';
   input.spellcheck = false;
 
-  // Insère l'input au début du trigger
   trigger.insertBefore(input, trigger.firstChild);
 
-  // Focus immédiat avec sélection automatique
   setTimeout(() => input.focus(), 20);
 
-  // Evt. 1 : Filtrage en direct à la frappe
   input.oninput = () => {
     filterSelectOptions(menu, input.value);
   };
 
-  // Evt. 2 : Validation avec Entrée ou Annulation avec Échap
   input.onkeydown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      // Valide le premier résultat visible
       const firstVisible = Array.from(menu.querySelectorAll('.select-option:not(.select-no-result)')).find(opt => opt.style.display !== 'none');
       if (firstVisible) selectOption(select, firstVisible);
     } else if (e.key === 'Escape') {
@@ -402,7 +364,6 @@ function openCustomSelect(select) {
   };
 }
 
-// Ferme le menu et détruit l'input temp.
 function closeCustomSelect(select) {
   select.classList.remove('open');
 
@@ -411,16 +372,13 @@ function closeCustomSelect(select) {
   const input = select.querySelector('.select-search-input');
   const menu = select.querySelector('.select-menu');
 
-  // Détruit le vrai input
   if (input) input.remove();
 
-  // Révèle et restaure le label
   if (label) {
     label.style.display = '';
     if (select._originalText) label.innerText = select._originalText;
   }
 
-  // Réaffiche toutes les options
   if (menu) {
     menu.querySelectorAll('.select-option').forEach(opt => opt.style.display = '');
     const noResult = menu.querySelector('.select-no-result');
@@ -428,7 +386,6 @@ function closeCustomSelect(select) {
   }
 }
 
-// Valide la sélection d'une option
 function selectOption(select, option) {
   const label = select.querySelector('.select-label');
   const menu = select.querySelector('.select-menu');
@@ -437,7 +394,7 @@ function selectOption(select, option) {
   option.classList.add('selected');
 
   const selectedText = option.innerText;
-  select._originalText = selectedText; // Met à jour la valeur enregistrée
+  select._originalText = selectedText;
   if (label) label.innerText = selectedText;
 
   const val = option.getAttribute('data-value');
@@ -447,7 +404,6 @@ function selectOption(select, option) {
   closeCustomSelect(select);
 }
 
-// Filtre les options d'après la recherche
 function filterSelectOptions(menu, query) {
   const cleanQuery = query.toLowerCase().trim();
   const options = Array.from(menu.querySelectorAll('.select-option:not(.select-no-result)'));
@@ -459,7 +415,6 @@ function filterSelectOptions(menu, query) {
     if (match) matchCount++;
   });
 
-  // Gestion de la ligne "Aucun résultat"
   let noResultEl = menu.querySelector('.select-no-result');
   if (matchCount === 0) {
     if (!noResultEl) {
@@ -473,15 +428,10 @@ function filterSelectOptions(menu, query) {
   }
 }
 
-// Clic extérieur pour fermer
 window.addEventListener('click', () => {
   document.querySelectorAll('.custom-select.open').forEach(s => closeCustomSelect(s));
 });
 
-
-// ======================================================================
-// AUTO-COMPLÉTION DES RÈGLES
-// ======================================================================
 const payeeInput = document.getElementById('op-payee');
 const suggestionsMenu = document.getElementById('payee-suggestions');
 const suggestionsList = suggestionsMenu.querySelector('.select-menu');
@@ -490,12 +440,11 @@ let selectedSuggestionIndex = -1;
 payeeInput.addEventListener('input', () => {
   if (modalMode === 'rule') {
     suggestionsMenu.style.display = 'none';
-    return; // On ne fait rien si on configure une règle
+    return;
   }
-  
+
   const val = payeeInput.value;
-  
-  // Si ça commence par / et qu'il n'y a pas d'espace, on affiche le menu
+
   if (val.startsWith('/') && !val.includes(' ')) {
     const query = val.substring(1).toLowerCase();
     const matchingRules = db.rules.filter(r => r.keyword && r.keyword.toLowerCase().startsWith(query));
@@ -508,13 +457,13 @@ payeeInput.addEventListener('input', () => {
       matchingRules.forEach((rule, idx) => {
         const option = document.createElement('div');
         option.className = 'select-option';
-        if (idx === 0) selectedSuggestionIndex = 0; // On sélectionne la première par défaut
+        if (idx === 0) selectedSuggestionIndex = 0;
         option.innerHTML = `
           <span class="rule-suggestion-key">/${escapeHtml(rule.keyword)}</span>
           <span class="rule-suggestion-name">${escapeHtml(rule.name || 'Sans nom')}</span>
         `;
         option.addEventListener('mousedown', (e) => {
-          e.preventDefault(); // Empêche le blur du champ input
+          e.preventDefault();
           applyRuleSuggestion(rule);
         });
         suggestionsList.appendChild(option);
@@ -528,14 +477,12 @@ payeeInput.addEventListener('input', () => {
   }
 });
 
-// Fermer le menu si on clique ailleurs
 document.addEventListener('click', (e) => {
   if (e.target !== payeeInput && !suggestionsMenu.contains(e.target)) {
     suggestionsMenu.style.display = 'none';
   }
 });
 
-// Gestion du clavier (Entrée / Flèches / Échap)
 payeeInput.addEventListener('keydown', (e) => {
   if (modalMode === 'rule') return;
   if (suggestionsMenu.style.display === 'none') return;
@@ -569,31 +516,23 @@ function updateSuggestionFocus(options) {
 }
 
 function applyRuleSuggestion(rule) {
-  // 1. Remplir les champs
   setType(rule.type || 'expense');
-  
+
   if (rule.amount_cents > 0) {
     document.getElementById('op-amount').value = formatMoneyInput(rule.amount_cents);
   }
-  
+
   if (rule.account_id) selectDropdownValue('#op-account', rule.account_id);
   if (rule.to_account_id) selectDropdownValue('#op-to-account', rule.to_account_id);
   if (rule.category_id) selectDropdownValue('#op-category', rule.category_id);
-  
+
   if (rule.note) document.getElementById('op-note').value = rule.note;
-  
-  // 2. Remplacer le texte tapé par la vraie description de la règle
+
   payeeInput.value = rule.payee || '';
-  
-  // 3. Fermer le menu
+
   suggestionsMenu.style.display = 'none';
   payeeInput.focus();
 }
-
-
-// ======================================================================
-// THÈME
-// ======================================================================
 
 let savedTheme = localStorage.getItem('tabula-theme') || 'system';
 let tempTheme = savedTheme;
@@ -609,18 +548,12 @@ function applyVisualTheme(theme) {
   }
 }
 
-// Écoute les changements de l'OS en direct
 window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
   const active = settingsModal.classList.contains('active') ? tempTheme : savedTheme;
   if (active === 'system') {
     document.body.classList.toggle('light-mode', e.matches);
   }
 });
-
-
-// ======================================================================
-// DONNÉES & SOLDES
-// ======================================================================
 
 function calculateBalances() {
   const accountBalances = {};
@@ -644,11 +577,6 @@ function calculateBalances() {
     byAccount: accountBalances
   };
 }
-
-
-// ======================================================================
-// CAROUSEL DES SOLDES
-// ======================================================================
 
 const CAROUSEL_STABLE_MS = 3000;
 const CAROUSEL_ANIM_MS = 2000;
@@ -717,7 +645,6 @@ function renderBalanceCarousel() {
   setupCarouselSwipe(track);
 }
 
-// Met à jour les chiffres du carrousel en direct sans recharger les slides ni sauter
 function updateBalanceCarouselValues() {
   const track = document.getElementById('carousel-track');
   if (!track || !track.children.length) {
@@ -730,37 +657,34 @@ function updateBalanceCarouselValues() {
   const totalSlides = slidesData.length;
   if (totalSlides <= 1) return;
 
-  // Données ordonnées avec les clones [Dernier, ...Vrais, Premier]
   const renderData = [
     slidesData[totalSlides - 1],
     ...slidesData,
     slidesData[0]
   ];
 
-  // Met à jour uniquement le texte du montant de chaque slide existante
   Array.from(track.children).forEach((slideEl, idx) => {
     const slide = renderData[idx];
     if (!slide) return;
 
-    const formatted = formatMoney(slide.balance).replace(/[\u202F\u00A0]/g, ' ');
-    const [amount, currency] = formatted.split(/\s(?=[^\s]+$)/);
-    
     const amountEl = slideEl.querySelector('.slide-amount');
     if (amountEl) {
-      amountEl.innerHTML = `${amount} <span class="slide-currency">${currency}</span>`;
+      amountEl.innerHTML = formatSlideAmount(slide.balance);
     }
   });
 }
 
+function formatSlideAmount(cents) {
+  const [amount, currency] = formatMoney(cents).replace(/[\u202F\u00A0]/g, ' ').split(/\s(?=[^\s]+$)/);
+  return `${amount} <span class="slide-currency">${currency}</span>`;
+}
 
 function createSlideHTML(slide) {
-  const formatted = formatMoney(slide.balance).replace(/[\u202F\u00A0]/g, ' ');
-  const [amount, currency] = formatted.split(/\s(?=[^\s]+$)/);
   return `
     <div class="carousel-slide">
       <span class="slide-label">${escapeHtml(slide.title)}</span>
       <div class="slide-amount">
-        ${amount} <span class="slide-currency">${currency}</span>
+        ${formatSlideAmount(slide.balance)}
       </div>
     </div>
   `;
@@ -886,11 +810,6 @@ function setupCarouselSwipe(track) {
   };
 }
 
-
-// ======================================================================
-// TABLEAU DES OPÉRATIONS (recherche et rendu)
-// ======================================================================
-
 document.getElementById('search-input').addEventListener('input', (e) => {
   searchQuery = e.target.value.trim();
   visibleCount = 50;
@@ -905,10 +824,8 @@ function renderTransactions() {
 
   let list = [...db.transactions];
 
-  // Tri chronologique
   list.sort((a, b) => b.date.localeCompare(a.date));
 
-  // Recherche globale
   if (searchQuery) {
     const queryTokens = normalizeSearchText(searchQuery).split(/\s+/).filter(t => t.length > 0);
 
@@ -935,7 +852,6 @@ function renderTransactions() {
     });
   }
 
-  // Gestion de l'état vide
   if (list.length === 0) {
     tableCard.style.display = 'none';
     emptyState.style.display = 'flex';
@@ -1020,27 +936,20 @@ document.getElementById('load-more-btn').addEventListener('click', () => {
   renderTransactions();
 });
 
-
-// ======================================================================
-// GESTION DES RÉCURRENCES EN ATTENTE (ACCUEIL)
-// ======================================================================
 function renderPendingRecurrences() {
   const panel = document.getElementById('recurrences-panel');
   const list = document.getElementById('recurrences-list');
   const countText = document.getElementById('recurrences-count-text');
-  
+
   const pending = db.pending_recurrences || [];
 
-  // Si vide, on cache le panneau
   if (pending.length === 0) {
     panel.style.display = 'none';
     return;
   }
 
-  // Sinon on l'affiche
   panel.style.display = 'flex';
 
-  // --- LOGIQUE D'AFFICHAGE (MODE 1 ou PLUSIEURS) ---
   const titleEl = panel.querySelector('.summary-text h3');
   const iconEl = panel.querySelector('.recurrences-summary .icon-illu');
   const footerEl = panel.querySelector('.recurrences-footer');
@@ -1061,12 +970,11 @@ function renderPendingRecurrences() {
 
   list.innerHTML = '';
 
-  // --- GÉNÉRATION DES LIGNES ---
   pending.forEach(item => {
     const isIncome = item.type === 'income';
     const sign = isIncome ? '+ ' : '- ';
     const amountClass = isIncome ? 'positive' : 'negative';
-    
+
     const row = document.createElement('div');
     row.className = 'recurrence-row';
 
@@ -1090,37 +998,26 @@ function renderPendingRecurrences() {
       </div>
     `;
 
-    // --- ACTION : IGNORER UNE LIGNE ---
     row.querySelector('.btn-ignore-single').addEventListener('click', async () => {
-      // 1. On retire l'élément de la liste en mémoire
       db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
-      
-      // 2. On sauvegarde la nouvelle liste vide ou réduite en DB
+
       await window.tabula.updatePendingRecurrences(db.pending_recurrences);
-      
-      // 3. On met à jour l'interface
+
       renderPendingRecurrences();
     });
 
-    // --- ACTION : VALIDER UNE LIGNE ---
     row.querySelector('.btn-validate-single').addEventListener('click', async () => {
-      // 1. On prépare la transaction (on retire l'ID de récurrence)
       const newTx = { ...item };
       delete newTx.recurrence_id;
-      
-      // 2. On l'ajoute à la vraie base de données
+
       const saved = await window.tabula.addTransaction(newTx);
-      
-      // 3. On l'ajoute à la liste en mémoire des transactions
+
       db.transactions.unshift(saved);
 
-      // 4. On retire l'élément de la liste d'attente
       db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
-      
-      // 5. On sauvegarde la nouvelle liste d'attente en DB
+
       await window.tabula.updatePendingRecurrences(db.pending_recurrences);
 
-      // 6. On met à jour toutes les interfaces (panneau, tableau, soldes)
       renderPendingRecurrences();
       renderTransactions();
       updateBalanceCarouselValues();
@@ -1129,43 +1026,31 @@ function renderPendingRecurrences() {
     list.appendChild(row);
   });
 
-  // --- BOUTONS GLOBAUX (Si > 1 opération) ---
   if (pending.length > 1) {
-    // ACTION : TOUT IGNORER
     document.getElementById('btn-ignore-all').onclick = async () => {
       db.pending_recurrences = [];
       await window.tabula.updatePendingRecurrences([]);
       renderPendingRecurrences();
     };
 
-    // ACTION : TOUT VALIDER
     document.getElementById('btn-validate-all').onclick = async () => {
-      // On boucle sur toutes les opérations en attente
       for (const item of pending) {
         const newTx = { ...item };
         delete newTx.recurrence_id;
-        
-        // On ajoute chaque transaction à la DB
+
         const saved = await window.tabula.addTransaction(newTx);
         db.transactions.unshift(saved);
       }
-      
-      // Une fois toutes ajoutées, on vide la liste d'attente
+
       db.pending_recurrences = [];
       await window.tabula.updatePendingRecurrences([]);
-      
-      // On met à jour toutes les interfaces
+
       renderPendingRecurrences();
       renderTransactions();
       updateBalanceCarouselValues();
     };
   }
 }
-
-
-// ======================================================================
-// MENU CONTEXTUEL (clic droit)
-// ======================================================================
 
 const contextMenu = document.getElementById('row-context-menu');
 
@@ -1206,34 +1091,42 @@ contextMenu.querySelector('.action-delete').addEventListener('click', () => {
 
 window.addEventListener('click', closeContextMenu);
 
-
-// ======================================================================
-// MODALE OPÉRATION (créer / modifier / dupliquer)
-// ======================================================================
-
 const opModal = document.getElementById('operation-modal');
 const opForm = document.getElementById('operation-form');
 const modalTitle = opModal.querySelector('h2');
 const modalSubmitBtn = document.getElementById('save-op-btn');
 
-function openCreateModal() {
-  if (document.getElementById('payee-suggestions')) document.getElementById('payee-suggestions').style.display = 'none';
+function openOperationModal({ title, submitText, date = '', dateEnabled = true,
+  dateLabel = 'Date', amount = '', amountLabel = 'Montant', payeeHint = true,
+  payee = '', note = '' }) {
+  modalTitle.innerText = title;
+  modalSubmitBtn.innerText = submitText;
 
-  modalMode = 'create';
-  editingTransactionId = null;
-  modalTitle.innerText = "Nouvelle opération";
-  modalSubmitBtn.innerText = "Enregistrer";
-
-  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>';
+  document.querySelector('#group-payee label').innerHTML = payeeHint
+    ? 'Description <span class="label-hint">(tapez / pour les règles)</span>'
+    : 'Description';
 
   opModal.classList.add('active');
-  document.getElementById('op-date').disabled = false;
-  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
-  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
-  document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('op-amount').value = '';
-  document.getElementById('op-payee').value = '';
-  document.getElementById('op-note').value = '';
+  document.getElementById('payee-suggestions').style.display = 'none';
+
+  const dateInput = document.getElementById('op-date');
+  dateInput.disabled = !dateEnabled;
+  dateInput.value = date;
+  dateInput.parentElement.querySelector('label').innerHTML = dateLabel;
+
+  const amountInput = document.getElementById('op-amount');
+  amountInput.value = amount;
+  amountInput.parentElement.parentElement.querySelector('label').innerHTML = amountLabel;
+}
+
+function openCreateModal() {
+  modalMode = 'create';
+  editingTransactionId = null;
+  openOperationModal({
+    title: 'Nouvelle opération',
+    submitText: 'Enregistrer',
+    date: new Date().toISOString().split('T')[0]
+  });
 
   setupMoneyInput(document.getElementById('op-amount'), {
     allowNegative: false,
@@ -1249,19 +1142,14 @@ function openCreateModal() {
 function openEditModal(tx) {
   modalMode = 'edit';
   editingTransactionId = tx.id;
-  modalTitle.innerText = "Modifier l'opération";
-  modalSubmitBtn.innerText = "Mettre à jour";
-
-  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>';
-
-  opModal.classList.add('active');
-  document.getElementById('op-date').disabled = false;
-  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
-  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
-  document.getElementById('op-date').value = tx.date;
-  document.getElementById('op-amount').value = (tx.amount_cents / 100).toFixed(2).replace('.', ',');
-  document.getElementById('op-payee').value = tx.payee || '';
-  document.getElementById('op-note').value = tx.note || '';
+  openOperationModal({
+    title: "Modifier l'opération",
+    submitText: 'Mettre à jour',
+    date: tx.date,
+    amount: (tx.amount_cents / 100).toFixed(2).replace('.', ','),
+    payee: tx.payee || '',
+    note: tx.note || ''
+  });
 
   setType(tx.type);
   setupDropdown('#op-account', db.accounts, tx.account_id);
@@ -1275,19 +1163,14 @@ function openEditModal(tx) {
 function openDuplicateModal(tx) {
   modalMode = 'create';
   editingTransactionId = null;
-  modalTitle.innerText = "Nouvelle opération";
-  modalSubmitBtn.innerText = "Enregistrer";
-
-  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>';
-
-  opModal.classList.add('active');
-  document.getElementById('op-date').disabled = false;
-  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
-  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
-  document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
-  document.getElementById('op-amount').value = (tx.amount_cents / 100).toFixed(2).replace('.', ',');
-  document.getElementById('op-payee').value = tx.payee || '';
-  document.getElementById('op-note').value = tx.note || '';
+  openOperationModal({
+    title: 'Nouvelle opération',
+    submitText: 'Enregistrer',
+    date: new Date().toISOString().split('T')[0],
+    amount: (tx.amount_cents / 100).toFixed(2).replace('.', ','),
+    payee: tx.payee || '',
+    note: tx.note || ''
+  });
 
   setType(tx.type);
   setupDropdown('#op-account', db.accounts, tx.account_id);
@@ -1299,84 +1182,50 @@ function openDuplicateModal(tx) {
 
 function openRecurrenceOpModal(rec, index) {
   modalMode = 'recurrence';
-  editingRecurrenceIndex = index; // On réutilise la variable globale
-  modalTitle.innerText = "Configuration de l'opération";
-  modalSubmitBtn.innerText = "Sauvegarder";
+  editingRecurrenceIndex = index;
+  openOperationModal({
+    title: "Configuration de l'opération",
+    submitText: 'Sauvegarder',
+    dateEnabled: false,
+    dateLabel: 'Date <span class="label-hint">(Automatique)</span>',
+    amount: rec.amount_cents > 0 ? formatMoneyInput(rec.amount_cents) : '',
+    payeeHint: false,
+    payee: rec.payee || '',
+    note: rec.note || ''
+  });
 
-  opModal.classList.add('active');
-  const suggestions = document.getElementById('payee-suggestions');
-  if (suggestions) suggestions.style.display = 'none';
-
-  // Gestion de la date (grisée, gérée par la fréquence)
-  const dateInput = document.getElementById('op-date');
-  const dateLabel = dateInput.parentElement.querySelector('label');
-  dateInput.value = ''; // On laisse vide ou on met la date du jour pour l'exemple
-  dateInput.disabled = true;
-  dateLabel.innerHTML = 'Date <span class="label-hint">(Automatique)</span>';
-
-  // Gestion du montant
-  const amountInput = document.getElementById('op-amount');
-  const amountLabel = amountInput.parentElement.parentElement.querySelector('label');
-  amountInput.value = rec.amount_cents > 0 ? formatMoneyInput(rec.amount_cents) : '';
-  amountLabel.innerHTML = 'Montant';
-
-  // Label description (pas d'auto-complétion de règles ici)
-  document.querySelector('#group-payee label').innerHTML = 'Description';
-
-  setupMoneyInput(amountInput, { allowNegative: false, allowEmpty: false });
-
-  // Remplissage des autres champs
-  document.getElementById('op-payee').value = rec.payee || '';
-  document.getElementById('op-note').value = rec.note || '';
+  setupMoneyInput(document.getElementById('op-amount'), { allowNegative: false, allowEmpty: false });
   setType(rec.type || 'expense');
-
-  // Menus déroulants
   setupDropdown('#op-account', db.accounts, rec.account_id || db.accounts[0]?.id);
   setupDropdown('#op-to-account', db.accounts, rec.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
   setupDropdown('#op-category', db.categories, rec.category_id || db.categories[0]?.id);
 
-  setTimeout(() => amountInput.focus(), 50);
+  setTimeout(() => document.getElementById('op-amount').focus(), 50);
 }
-
 
 function openRuleConfigModal(rule, index) {
   modalMode = 'rule';
-  editingTransactionId = index; // On utilise cette variable pour stocker l'index de la règle
-  modalTitle.innerText = "Configuration de l'opération";
-  modalSubmitBtn.innerText = "Sauvegarder";
+  editingTransactionId = index;
+  openOperationModal({
+    title: "Configuration de l'opération",
+    submitText: 'Sauvegarder',
+    dateEnabled: false,
+    dateLabel: 'Date <span class="label-hint">(Automatique)</span>',
+    amount: rule.amount_cents > 0 ? (rule.amount_cents / 100).toFixed(2).replace('.', ',') : '',
+    amountLabel: 'Montant <span class="label-hint">(Optionnel)</span>',
+    payeeHint: false,
+    payee: rule.payee || '',
+    note: rule.note || ''
+  });
 
-  document.querySelector('#group-payee label').innerHTML = 'Description';
-
-  opModal.classList.add('active');
-  
- // Gestion de la date
-  const dateInput = document.getElementById('op-date');
-  const dateLabel = dateInput.parentElement.querySelector('label');
-  dateInput.value = '';
-  dateInput.disabled = true;
-  dateLabel.innerHTML = 'Date <span class="label-hint">(Automatique)</span>';
-
-  // Gestion du montant
-  const amountInput = document.getElementById('op-amount');
-  const amountLabel = amountInput.parentElement.parentElement.querySelector('label');
-  amountInput.value = rule.amount_cents > 0 ? (rule.amount_cents / 100).toFixed(2).replace('.', ',') : '';
-  amountLabel.innerHTML = 'Montant <span class="label-hint">(Optionnel)</span>';
-  
-  setupMoneyInput(amountInput, { allowNegative: false, allowEmpty: true });
-
-  // Remplissage des autres champs
-  document.getElementById('op-payee').value = rule.payee || '';
-  document.getElementById('op-note').value = rule.note || '';
+  setupMoneyInput(document.getElementById('op-amount'), { allowNegative: false, allowEmpty: true });
   setType(rule.type || 'expense');
-
-  // Menus déroulants
   setupDropdown('#op-account', db.accounts, rule.account_id || db.accounts[0]?.id);
   setupDropdown('#op-to-account', db.accounts, rule.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
   setupDropdown('#op-category', db.categories, rule.category_id || db.categories[0]?.id);
 
-  setTimeout(() => amountInput.focus(), 50);
+  setTimeout(() => document.getElementById('op-amount').focus(), 50);
 }
-
 function closeOpModal() {
   opModal.classList.remove('active');
   const suggestions = document.getElementById('payee-suggestions');
@@ -1387,8 +1236,6 @@ function closeOpModal() {
 document.getElementById('open-new-op-btn').addEventListener('click', openCreateModal);
 document.getElementById('cancel-modal-btn').addEventListener('click', closeOpModal);
 
-// Raccourci « / » : depuis le champ Montant, bascule vers la Description
-// et ouvre l'auto-complétion des règles (modes création et modification uniquement)
 const opAmountInput = document.getElementById('op-amount');
 opAmountInput.addEventListener('keydown', (e) => {
   if (e.key !== '/' || (modalMode !== 'create' && modalMode !== 'edit')) return;
@@ -1456,7 +1303,6 @@ opForm.addEventListener('submit', async (e) => {
   const isRule = modalMode === 'rule';
   const isRecurrence = modalMode === 'recurrence';
 
-  // Si c'est une opération classique OU une récurrence, le montant ne peut pas être 0 ou vide
   if ((!isRule && !isRecurrence && amountCents <= 0) || (isRecurrence && amountCents <= 0)) {
     const amountInput = document.getElementById('op-amount');
     amountInput.focus();
@@ -1475,14 +1321,12 @@ opForm.addEventListener('submit', async (e) => {
     amount_cents: amountCents
   };
 
-  // Un virement doit se faire vers un compte différent du compte source
   if (currentOpType === 'transfer' && txData.account_id === txData.to_account_id) {
     flashInputError(document.querySelector('#op-account .select-trigger'));
     flashInputError(document.querySelector('#op-to-account .select-trigger'));
     return;
   }
 
-  // --- SAUVEGARDE RÈGLE ---
   if (isRule) {
     tempRules[editingTransactionId] = {
       ...tempRules[editingTransactionId],
@@ -1493,7 +1337,6 @@ opForm.addEventListener('submit', async (e) => {
     return;
   }
 
-  // --- SAUVEGARDE RÉCURRENCE ---
   if (isRecurrence) {
     tempRecurrences[editingRecurrenceIndex] = {
       ...tempRecurrences[editingRecurrenceIndex],
@@ -1504,7 +1347,6 @@ opForm.addEventListener('submit', async (e) => {
     return;
   }
 
-  // --- SAUVEGARDE OPÉRATION CLASSIQUE ---
   if (modalMode === 'edit') {
     txData.id = editingTransactionId;
     const updated = await window.tabula.updateTransaction(txData);
@@ -1519,11 +1361,6 @@ opForm.addEventListener('submit', async (e) => {
   renderTransactions();
   closeOpModal();
 });
-
-
-// ======================================================================
-// SUPPRESSION D'UNE OPÉRATION
-// ======================================================================
 
 const deleteModal = document.getElementById('delete-modal');
 function openDeleteModal(id) {
@@ -1545,11 +1382,6 @@ document.getElementById('confirm-delete-btn').addEventListener('click', async ()
   }
 });
 
-
-// ======================================================================
-// PARAMÈTRES
-// ======================================================================
-
 const settingsModal = document.getElementById('settings-modal');
 const accountsListEl = document.getElementById('settings-accounts-list');
 const categoriesListEl = document.getElementById('settings-categories-list');
@@ -1563,7 +1395,7 @@ let pendingSettingsDeleteIndex = null;
 function openSettingsDeleteModal(type, index, item) {
   pendingSettingsDeleteType = type;
   pendingSettingsDeleteIndex = index;
-  
+
   const descEl = document.getElementById('settings-delete-desc');
   const countEl = document.getElementById('settings-delete-count');
 
@@ -1593,7 +1425,7 @@ function openSettingsDeleteModal(type, index, item) {
 function openSettingsModal() {
   tempAccounts = JSON.parse(JSON.stringify(db.accounts));
   tempCategories = JSON.parse(JSON.stringify(db.categories));
-  tempRules = JSON.parse(JSON.stringify(db.rules || [])); 
+  tempRules = JSON.parse(JSON.stringify(db.rules || []));
   tempRecurrences = JSON.parse(JSON.stringify(db.recurrences || []));
   tempTheme = savedTheme;
   tempDataPath = savedDataPath;
@@ -1620,7 +1452,6 @@ function openSettingsModal() {
   settingsModal.classList.add('active');
 }
 
-
 function closeSettingsModal() {
   settingsModal.classList.remove('active');
   applyVisualTheme(savedTheme);
@@ -1634,25 +1465,20 @@ document.getElementById('settings-theme-select').addEventListener('change', (e) 
   applyVisualTheme(tempTheme);
 });
 
-// Moteur de validation (saisie vide et doublons)
-function validateAccountsList() {
+function validateUniqueNames(listEl, items, inputSelector) {
   let isValid = true;
   const nameCounts = {};
-  
-  // Comptage des doublons (insensible à la casse)
-  tempAccounts.forEach(acc => {
-    const clean = acc.name.trim().toLowerCase();
+
+  items.forEach(item => {
+    const clean = item.name.trim().toLowerCase();
     if (clean) nameCounts[clean] = (nameCounts[clean] || 0) + 1;
   });
 
-  // Vérification ligne par ligne
-  const rows = accountsListEl.querySelectorAll('.settings-row');
-  tempAccounts.forEach((acc, idx) => {
-    const clean = acc.name.trim().toLowerCase();
-    const segment = rows[idx]?.querySelector('.settings-name-segment');
-    const input = rows[idx]?.querySelector('.acc-name-input');
+  const rows = listEl.querySelectorAll('.settings-row');
+  items.forEach((item, idx) => {
+    const clean = item.name.trim().toLowerCase();
+    const input = rows[idx]?.querySelector(inputSelector);
 
-    // Erreur si nom vide ou nom en doublon
     if (clean === '' || nameCounts[clean] > 1) {
       isValid = false;
       flashInputError(rows[idx]);
@@ -1661,34 +1487,16 @@ function validateAccountsList() {
   });
 
   return isValid;
+}
+
+function validateAccountsList() {
+  return validateUniqueNames(accountsListEl, tempAccounts, '.acc-name-input');
 }
 
 function validateCategoriesList() {
-  let isValid = true;
-  const nameCounts = {};
-
-  tempCategories.forEach(cat => {
-    const clean = cat.name.trim().toLowerCase();
-    if (clean) nameCounts[clean] = (nameCounts[clean] || 0) + 1;
-  });
-
-  const rows = categoriesListEl.querySelectorAll('.settings-row');
-  tempCategories.forEach((cat, idx) => {
-    const clean = cat.name.trim().toLowerCase();
-    const segment = rows[idx]?.querySelector('.settings-name-segment');
-    const input = rows[idx]?.querySelector('.cat-name-input');
-
-    if (clean === '' || nameCounts[clean] > 1) {
-      isValid = false;
-      flashInputError(rows[idx]);
-      if (input && document.activeElement !== input) input.focus();
-    }
-  });
-
-  return isValid;
+  return validateUniqueNames(categoriesListEl, tempCategories, '.cat-name-input');
 }
 
-// Rendu des comptes
 function renderSettingsAccounts() {
   accountsListEl.innerHTML = '';
   tempAccounts.forEach((acc, idx) => {
@@ -1732,11 +1540,10 @@ function renderSettingsAccounts() {
 
     accountsListEl.appendChild(row);
   });
-  
+
   setupDragAndDrop(accountsListEl, tempAccounts, renderSettingsAccounts);
 }
 
-// Rendu des catégories
 function renderSettingsCategories() {
   categoriesListEl.innerHTML = '';
   tempCategories.forEach((cat, idx) => {
@@ -1749,7 +1556,7 @@ function renderSettingsCategories() {
         <input type="text" class="settings-input cat-name-input" value="${escapeHtml(cat.name)}" placeholder="Nom de la catégorie">
         <span class="char-counter">0/24</span>
       </div>
-      
+
       <div class="settings-row-actions">
         <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
         <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
@@ -1770,7 +1577,6 @@ function renderSettingsCategories() {
   setupDragAndDrop(categoriesListEl, tempCategories, renderSettingsCategories);
 }
 
-// Rendu des récurrences
 function renderSettingsRecurrences() {
   recurrencesListEl.innerHTML = '';
   tempRecurrences.forEach((rec, idx) => {
@@ -1791,23 +1597,19 @@ function renderSettingsRecurrences() {
       </div>
     `;
 
-    // Saisie directe du nom
     const nameInput = row.querySelector('.rec-name-input');
     nameInput.addEventListener('input', () => {
       rec.name = nameInput.value;
     });
 
-    // Bouton Calendrier
     row.querySelector('.rec-calendar-btn').addEventListener('click', () => {
       openFreqModal(rec, idx);
     });
 
-    // Bouton Modifier l'opération (Crayon)
     row.querySelector('.rec-edit-op-btn').addEventListener('click', () => {
       openRecurrenceOpModal(rec, idx);
     });
 
-    // Bouton Supprimer
     row.querySelector('.delete-btn').addEventListener('click', () => {
       openSettingsDeleteModal('recurrence', idx, rec);
     });
@@ -1818,21 +1620,134 @@ function renderSettingsRecurrences() {
   setupDragAndDrop(recurrencesListEl, tempRecurrences, renderSettingsRecurrences);
 }
 
+function renderSettingsRules() {
+  rulesListEl.innerHTML = '';
+  tempRules.forEach((rule, idx) => {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.setAttribute('data-id', rule.id);
 
-// ======================================================================
-// MODALE DE FRÉQUENCE
-// ======================================================================
+    row.innerHTML = `
+      <div class="settings-name-segment">
+        <input type="text" class="settings-input rule-name-input" value="${escapeHtml(rule.name || '')}" placeholder="Nom de la règle">
+        <span class="char-counter">0/12</span>
+      </div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-keyword-segment">
+        <input type="text" class="settings-input rule-keyword-input" value="${escapeHtml(rule.keyword ? '/' + rule.keyword : '')}" placeholder="/clé">
+        <span class="char-counter">0/8</span>
+      </div>
+
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn rule-edit-btn" title="Configurer la règle"><svg class="icon"><use href="icons.svg#icon-edit"></use></svg></button>
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
+    `;
+
+    const nameSegment = row.querySelector('.settings-name-segment');
+    const nameInput = row.querySelector('.rule-name-input');
+    setupCharCounter(nameSegment, nameInput, 12, (val) => { rule.name = val; });
+
+    const keywordSegment = row.querySelector('.settings-keyword-segment');
+    const keywordInput = row.querySelector('.rule-keyword-input');
+    const keywordCounter = keywordSegment.querySelector('.char-counter');
+
+    function updateKwDisplay() {
+      const val = keywordInput.value;
+      const len = val.startsWith('/') ? val.length - 1 : val.length;
+      keywordCounter.innerText = `${len}/8`;
+      keywordCounter.classList.toggle('overflow', len > 8);
+    }
+    updateKwDisplay();
+
+    keywordInput.addEventListener('focus', () => {
+      if (!keywordInput.value.startsWith('/')) {
+        keywordInput.value = '/' + keywordInput.value;
+      }
+      updateKwDisplay();
+      keywordInput.setSelectionRange(keywordInput.value.length, keywordInput.value.length);
+    });
+
+    keywordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && keywordInput.value === '/') {
+        e.preventDefault();
+      }
+    });
+
+    keywordInput.addEventListener('input', () => {
+      let val = keywordInput.value;
+      if (!val.startsWith('/')) {
+        val = '/' + val;
+      }
+      val = '/' + val.substring(1).replace(/\//g, '').replace(/\s/g, '').toLowerCase();
+      if (val.length > 9) {
+        val = val.substring(0, 9);
+      }
+      keywordInput.value = val;
+      rule.keyword = val.substring(1);
+      updateKwDisplay();
+    });
+
+    keywordInput.addEventListener('blur', () => {
+      if (keywordInput.value === '/') {
+        keywordInput.value = '';
+        rule.keyword = '';
+      }
+      updateKwDisplay();
+    });
+
+    row.querySelector('.rule-edit-btn').addEventListener('click', () => {
+      openRuleConfigModal(rule, idx);
+    });
+
+    row.querySelector('.delete-btn').addEventListener('click', () => {
+      openSettingsDeleteModal('rule', idx, rule);
+    });
+
+    rulesListEl.appendChild(row);
+  });
+
+  setupDragAndDrop(rulesListEl, tempRules, renderSettingsRules);
+}
+
+function validateRulesList() {
+  let isValid = true;
+  const keywordCounts = {};
+
+  tempRules.forEach(rule => {
+    const cleanKw = rule.keyword ? rule.keyword.trim().toLowerCase() : '';
+    if (cleanKw) keywordCounts[cleanKw] = (keywordCounts[cleanKw] || 0) + 1;
+  });
+
+  const rows = rulesListEl.querySelectorAll('.settings-row');
+  tempRules.forEach((rule, idx) => {
+    const cleanKw = rule.keyword ? rule.keyword.trim().toLowerCase() : '';
+    const row = rows[idx];
+
+    if (cleanKw === '' || keywordCounts[cleanKw] > 1) {
+      isValid = false;
+      flashInputError(row);
+      if (cleanKw === '') {
+        row.querySelector('.rule-keyword-input').focus();
+      }
+    }
+  });
+
+  return isValid;
+}
 
 const freqModal = document.getElementById('freq-modal');
 const freqTypeSelect = document.getElementById('freq-type-select');
 const freqDayOfWeekSelect = document.getElementById('freq-day-of-week');
 
-// Fonction utilitaire pour remplir un custom-select
 function populateSelect(selectId, min, max, defaultValue) {
   const selectEl = document.getElementById(selectId);
   const menuEl = selectEl.querySelector('.select-menu');
   const labelEl = selectEl.querySelector('.select-label');
-  
+
   menuEl.innerHTML = '';
   for (let i = min; i <= max; i++) {
     const isSelected = i === defaultValue;
@@ -1846,7 +1761,7 @@ function populateMonthSelect(selectId, defaultValue) {
   const selectEl = document.getElementById(selectId);
   const menuEl = selectEl.querySelector('.select-menu');
   const labelEl = selectEl.querySelector('.select-label');
-  
+
   menuEl.innerHTML = '';
   MONTHS_FR.forEach((month, idx) => {
     const isSelected = idx === defaultValue;
@@ -1857,18 +1772,15 @@ function populateMonthSelect(selectId, defaultValue) {
 
 function openFreqModal(rec, index) {
   editingRecurrenceIndex = index;
-  
+
   const freq = rec.frequency || { type: 'monthly', day: 1 };
 
-  // Remplissage des listes déroulantes
   populateSelect('freq-day-of-month', 1, 31, freq.day || 1);
   populateSelect('freq-day-of-year', 1, 31, freq.day || 1);
   populateMonthSelect('freq-month-of-year', freq.month || 0);
 
-  // Réinitialisation des menus déroulants
   initCustomSelects();
 
-  // Sélection des valeurs courantes
   const typeOption = freqTypeSelect.querySelector(`.select-option[data-value="${freq.type}"]`);
   if (typeOption) selectOption(freqTypeSelect, typeOption);
 
@@ -1927,139 +1839,10 @@ document.getElementById('save-freq-btn').addEventListener('click', () => {
   freqModal.classList.remove('active');
 });
 
-// Rendu des règles
-function renderSettingsRules() {
-  rulesListEl.innerHTML = '';
-  tempRules.forEach((rule, idx) => {
-    const row = document.createElement('div');
-    row.className = 'settings-row';
-    row.setAttribute('data-id', rule.id);
-
-    row.innerHTML = `
-      <div class="settings-name-segment">
-        <input type="text" class="settings-input rule-name-input" value="${escapeHtml(rule.name || '')}" placeholder="Nom de la règle">
-        <span class="char-counter">0/12</span>
-      </div>
-
-      <div class="settings-divider"></div>
-
-      <div class="settings-keyword-segment">
-        <input type="text" class="settings-input rule-keyword-input" value="${escapeHtml(rule.keyword ? '/' + rule.keyword : '')}" placeholder="/clé">
-        <span class="char-counter">0/8</span>
-      </div>
-
-      <div class="settings-row-actions">
-        <button type="button" class="settings-row-btn rule-edit-btn" title="Configurer la règle"><svg class="icon"><use href="icons.svg#icon-edit"></use></svg></button>
-        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
-        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
-      </div>
-    `;
-
-    const nameSegment = row.querySelector('.settings-name-segment');
-    const nameInput = row.querySelector('.rule-name-input');
-    setupCharCounter(nameSegment, nameInput, 12, (val) => { rule.name = val; });
-
-    // --- LOGIQUE DU RACCOURCI (avec slash forcé) ---
-    const keywordSegment = row.querySelector('.settings-keyword-segment');
-    const keywordInput = row.querySelector('.rule-keyword-input');
-    const keywordCounter = keywordSegment.querySelector('.char-counter');
-
-    function updateKwDisplay() {
-      const val = keywordInput.value;
-      const len = val.startsWith('/') ? val.length - 1 : val.length;
-      keywordCounter.innerText = `${len}/8`;
-      keywordCounter.classList.toggle('overflow', len > 8);
-    }
-    updateKwDisplay();
-
-    keywordInput.addEventListener('focus', () => {
-      if (!keywordInput.value.startsWith('/')) {
-        keywordInput.value = '/' + keywordInput.value;
-      }
-      updateKwDisplay();
-      keywordInput.setSelectionRange(keywordInput.value.length, keywordInput.value.length);
-    });
-
-    keywordInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && keywordInput.value === '/') {
-        e.preventDefault();
-      }
-    });
-
-    keywordInput.addEventListener('input', () => {
-      let val = keywordInput.value;
-      if (!val.startsWith('/')) {
-        val = '/' + val;
-      }
-      val = '/' + val.substring(1).replace(/\//g, '').replace(/\s/g, '').toLowerCase();
-      if (val.length > 9) {
-        val = val.substring(0, 9);
-      }
-      keywordInput.value = val;
-      rule.keyword = val.substring(1);
-      updateKwDisplay();
-    });
-
-    keywordInput.addEventListener('blur', () => {
-      if (keywordInput.value === '/') {
-        keywordInput.value = '';
-        rule.keyword = '';
-      }
-      updateKwDisplay();
-    });
-
-    // --- LES BOUTONS D'ACTION ---
-    row.querySelector('.rule-edit-btn').addEventListener('click', () => {
-      openRuleConfigModal(rule, idx);
-    });
-
-    row.querySelector('.delete-btn').addEventListener('click', () => {
-      openSettingsDeleteModal('rule', idx, rule);
-    });
-
-    rulesListEl.appendChild(row);
-  });
-
-  setupDragAndDrop(rulesListEl, tempRules, renderSettingsRules);
-}
-
-// Validation des règles
-function validateRulesList() {
-  let isValid = true;
-  const keywordCounts = {};
-
-  tempRules.forEach(rule => {
-    const cleanKw = rule.keyword ? rule.keyword.trim().toLowerCase() : '';
-    if (cleanKw) keywordCounts[cleanKw] = (keywordCounts[cleanKw] || 0) + 1;
-  });
-
-  const rows = rulesListEl.querySelectorAll('.settings-row');
-  tempRules.forEach((rule, idx) => {
-    const cleanKw = rule.keyword ? rule.keyword.trim().toLowerCase() : '';
-    const row = rows[idx];
-    
-    // Erreur si le mot clé est vide ou s'il y a un doublon
-    if (cleanKw === '' || keywordCounts[cleanKw] > 1) {
-      isValid = false;
-      flashInputError(row);
-      if (cleanKw === '') {
-        row.querySelector('.rule-keyword-input').focus();
-      }
-    }
-  });
-
-  return isValid;
-}
-
-
-// ======================================================================
-// DRAG & DROP GÉNÉRIQUE (Scroll + animation Échap par clone)
-// ======================================================================
-
 function setupDragAndDrop(containerEl, dataArray, renderCallback) {
   const rows = containerEl.querySelectorAll('.settings-row');
   const scrollContainer = containerEl.closest('.settings-content') || containerEl.parentElement;
-  
+
   rows.forEach(row => {
     const handle = row.querySelector('.drag-handle');
     if (!handle) return;
@@ -2078,30 +1861,30 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
     handle.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
-      
+
       isDragging = true;
       rowRect = row.getBoundingClientRect();
       startX = e.clientX;
       startY = e.clientY;
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
-      
+
       currentIndex = Array.from(containerEl.children).indexOf(row);
-      originalData = [...dataArray]; 
-      
+      originalData = [...dataArray];
+
       document.body.classList.add('is-dragging-active');
 
       placeholder = document.createElement('div');
       placeholder.className = 'settings-row-placeholder';
       containerEl.insertBefore(placeholder, row);
-      
+
       row.classList.add('dragging');
       row.style.width = `${rowRect.width}px`;
       row.style.left = `${rowRect.left}px`;
       row.style.top = `${rowRect.top}px`;
-      
+
       placeholderIndex = currentIndex;
-      
+
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
       document.addEventListener('keydown', onKeyDown, true);
@@ -2125,14 +1908,14 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
       const deltaY = e.clientY - startY;
       row.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
 
-      const allElements = Array.from(containerEl.children).filter(el => 
+      const allElements = Array.from(containerEl.children).filter(el =>
         el !== row && el.classList.contains('settings-row')
       );
 
       let newIndex = allElements.length;
       for (let i = 0; i < allElements.length; i++) {
         const elRect = allElements[i].getBoundingClientRect();
-        
+
         if (e.clientY < elRect.top + (elRect.height / 2)) {
           newIndex = i;
           break;
@@ -2149,17 +1932,17 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
         } else {
           containerEl.appendChild(placeholder);
         }
-        
+
         placeholderIndex = newIndex;
 
         rowsToAnimate.forEach((r, i) => {
           const lastRect = r.getBoundingClientRect();
           const delta = firstRects[i].top - lastRect.top;
-          
+
           if (delta !== 0) {
             r.classList.remove('is-animating');
             r.style.transform = `translateY(${delta}px)`;
-            void r.offsetHeight; 
+            void r.offsetHeight;
             r.classList.add('is-animating');
             r.style.transform = '';
             setTimeout(() => {
@@ -2186,7 +1969,7 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
 
     function finishDrag(cancel) {
       isDragging = false;
-      
+
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       document.removeEventListener('keydown', onKeyDown, true);
@@ -2196,16 +1979,13 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
       document.body.classList.remove('is-dragging-active');
 
       if (cancel) {
-        // --- ANNULATION (ÉCHAP) : APPROCHE PAR CLONE ---
-        
-        // 1. Calculer la position visuelle actuelle de la carte
+
         const deltaX = lastMouseX - startX;
         const deltaY = lastMouseY - startY;
         const currentTop = rowRect.top + deltaY;
         const currentLeft = rowRect.left + deltaX;
         const rowId = row.getAttribute('data-id');
 
-        // 2. Mémoriser les positions actuelles des AUTRES cartes
         const currentRects = new Map();
         containerEl.querySelectorAll('.settings-row').forEach(el => {
           if (el !== row) {
@@ -2213,19 +1993,15 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
           }
         });
 
-        // 3. Détacher la carte en main et le placeholder du container
         placeholder.remove();
-        row.remove(); // Retire row du container
+        row.remove();
 
-        // 4. Restaurer les données et redessiner (ordre original)
         dataArray.length = 0;
         dataArray.push(...originalData);
         renderCallback();
 
-        // 5. Récupérer la nouvelle carte (recréée par renderCallback)
         const newRow = containerEl.querySelector(`.settings-row[data-id="${rowId}"]`);
 
-        // 6. Prépositionner les autres cartes pour le FLIP (avant de révéler row)
         const elementsToAnimate = [];
         containerEl.querySelectorAll('.settings-row').forEach(el => {
           if (el === newRow) {
@@ -2244,19 +2020,15 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
           }
         });
 
-        // 7. Préparer le clone pour l'animation : on le sort du container
-        //    et on l'attache au body pour qu'il survive à renderCallback
         document.body.appendChild(row);
         row.style.transition = 'none';
         row.style.top = `${currentTop}px`;
         row.style.left = `${currentLeft}px`;
         row.style.transform = 'none';
 
-        // 8. Forcer un reflow global
         void row.offsetHeight;
         void containerEl.offsetHeight;
 
-        // 9. Lancer les animations
         row.classList.add('is-animating');
         if (newRow) {
           const targetRect = newRow.getBoundingClientRect();
@@ -2269,7 +2041,6 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
           el.style.transform = '';
         });
 
-        // 10. Nettoyage final
         setTimeout(() => {
           row.remove();
           if (newRow) newRow.style.visibility = '';
@@ -2280,19 +2051,18 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
         }, 200);
 
       } else {
-        // --- LÂCHER (DROP) ---
         const placeholderRect = placeholder.getBoundingClientRect();
-        
+
         const currentTop = rowRect.top + (lastMouseY - startY);
         const currentLeft = rowRect.left + (lastMouseX - startX);
-        
+
         row.style.transition = 'none';
         row.style.top = `${currentTop}px`;
         row.style.left = `${currentLeft}px`;
         row.style.transform = 'none';
-        
+
         void row.offsetHeight;
-        
+
         row.classList.add('is-animating');
         row.style.top = `${placeholderRect.top}px`;
         row.style.left = `${placeholderRect.left}px`;
@@ -2300,7 +2070,7 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
         setTimeout(() => {
           const siblingsWithoutDrag = Array.from(containerEl.children).filter(el => el !== row);
           const targetIndex = siblingsWithoutDrag.indexOf(placeholder);
-          
+
           if (currentIndex !== targetIndex) {
             const [movedItem] = dataArray.splice(currentIndex, 1);
             dataArray.splice(targetIndex, 0, movedItem);
@@ -2313,39 +2083,38 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
           row.style.width = '';
           row.style.left = '';
           row.style.top = '';
-          
-          renderCallback(); 
+
+          renderCallback();
         }, 200);
       }
     }
   });
 }
 
+function focusNewRow(listEl, inputSelector) {
+  const input = listEl.querySelector(`.settings-row:last-child ${inputSelector}`);
+  if (input) setTimeout(() => input.focus(), 20);
+}
 
-// Ajout de compte
 document.getElementById('settings-add-account-btn').addEventListener('click', () => {
   tempAccounts.push({ id: 'acc_' + crypto.randomUUID(), name: '', initial_balance_cents: 0 });
   renderSettingsAccounts();
-  
-  // Focus sur la nouvelle ligne créée
-  const lastRow = accountsListEl.querySelector('.settings-row:last-child .acc-name-input');
-  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+
+  focusNewRow(accountsListEl, '.acc-name-input');
 });
 
-//  Ajout de catégorie
 document.getElementById('settings-add-category-btn').addEventListener('click', () => {
   tempCategories.push({ id: 'cat_' + crypto.randomUUID(), name: '' });
   renderSettingsCategories();
 
-  const lastRow = categoriesListEl.querySelector('.settings-row:last-child .cat-name-input');
-  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+  focusNewRow(categoriesListEl, '.cat-name-input');
 });
 
 document.getElementById('settings-add-recurrence-btn').addEventListener('click', () => {
-  tempRecurrences.push({ 
-    id: 'rec_' + crypto.randomUUID(), 
-    name: '', 
-    frequency: { type: 'monthly', day: 1 }, // Valeur par défaut pour que ça s'affiche
+  tempRecurrences.push({
+    id: 'rec_' + crypto.randomUUID(),
+    name: '',
+    frequency: { type: 'monthly', day: 1 },
     type: 'expense',
     amount_cents: 0,
     account_id: '',
@@ -2354,28 +2123,25 @@ document.getElementById('settings-add-recurrence-btn').addEventListener('click',
     note: ''
   });
   renderSettingsRecurrences();
-  
-  const lastRow = recurrencesListEl.querySelector('.settings-row:last-child .rec-name-input');
-  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+
+  focusNewRow(recurrencesListEl, '.rec-name-input');
 });
 
-// Ajout de règle
 document.getElementById('settings-add-rule-btn').addEventListener('click', () => {
-  tempRules.push({ 
-    id: 'rule_' + crypto.randomUUID(), 
-    name: '', 
-    keyword: '', 
-    type: 'expense', 
-    amount_cents: 0, 
-    account_id: '', 
-    category_id: '', 
-    note: '', 
-    payee: '' 
+  tempRules.push({
+    id: 'rule_' + crypto.randomUUID(),
+    name: '',
+    keyword: '',
+    type: 'expense',
+    amount_cents: 0,
+    account_id: '',
+    category_id: '',
+    note: '',
+    payee: ''
   });
   renderSettingsRules();
-  
-  const lastRow = rulesListEl.querySelector('.settings-row:last-child .rule-name-input');
-  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+
+  focusNewRow(rulesListEl, '.rule-name-input');
 });
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
@@ -2401,11 +2167,10 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   settingsModal.classList.remove('active');
 });
 
-// Navigation entre onglets protégés (bloque si saisie invalide)
 document.querySelectorAll('.settings-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const currentActivePane = document.querySelector('.settings-pane.active');
-    
+
     if (currentActivePane?.id === 'tab-accounts' && !validateAccountsList()) return;
     if (currentActivePane?.id === 'tab-categories' && !validateCategoriesList()) return;
     if (currentActivePane?.id === 'tab-rules' && !validateRulesList()) return;
@@ -2424,12 +2189,9 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
   });
 });
 
-// Gestion des données
-
 const importWarningModal = document.getElementById('import-warning-modal');
 const resetWarningModal = document.getElementById('reset-warning-modal');
 
-// Exporter
 document.getElementById('btn-export-backup').addEventListener('click', async () => {
   const success = await window.tabula.exportBackup();
   if (success) {
@@ -2440,7 +2202,6 @@ document.getElementById('btn-export-backup').addEventListener('click', async () 
   }
 });
 
-// Importer
 document.getElementById('btn-import-backup').addEventListener('click', () => {
   importWarningModal.classList.add('active');
 });
@@ -2456,7 +2217,6 @@ document.getElementById('confirm-import-warning-btn').addEventListener('click', 
   }
 });
 
-// Remise à zéro complète
 document.getElementById('btn-reset-db').addEventListener('click', () => {
   document.getElementById('reset-warning-modal').classList.add('active');
 });
@@ -2467,11 +2227,11 @@ document.getElementById('cancel-reset-warning-btn').addEventListener('click', ()
 
 document.getElementById('confirm-reset-warning-btn').addEventListener('click', async () => {
   document.getElementById('reset-warning-modal').classList.remove('active');
-  
+
   await window.tabula.resetData();
-  
+
   await loadApp();
-  
+
   closeSettingsModal();
 });
 
@@ -2496,7 +2256,6 @@ document.getElementById('confirm-settings-delete-btn').addEventListener('click',
   }
 });
 
-// Affichage du chemin actif
 async function refreshDataPathDisplay() {
   const inputEl = document.getElementById('db-path-input');
   if (window.tabula.getDataPath) {
@@ -2506,27 +2265,22 @@ async function refreshDataPathDisplay() {
   }
 }
 
-// Validation automatique d'un chemin tapé manuellement au clavier
 async function handleManualPathCommit() {
   const typedPath = dbPathInput.value.trim();
-  
-  // Si le champ est vide ou identique au chemin actuel, on remet le chemin sauvegardé
+
   if (!typedPath || typedPath === savedDataPath) {
     tempDataPath = savedDataPath;
     dbPathInput.value = savedDataPath;
     return;
   }
 
-  // Vérification de la validité du fichier tapé
   const res = await window.tabula.validateFile(typedPath);
-  
+
   if (!res || !res.valid) {
-    // Fichier invalide / introuvable : Alerte et restauration du chemin d'origine
     document.getElementById('incompatible-file-modal')?.classList.add('active');
     dbPathInput.value = savedDataPath;
     tempDataPath = savedDataPath;
   } else {
-    // Fichier valide : mise à jour et chargement immédiat des comptes dans les paramètres
     tempDataPath = typedPath;
     tempAccounts = JSON.parse(JSON.stringify(res.data.accounts));
     tempCategories = JSON.parse(JSON.stringify(res.data.categories));
@@ -2540,23 +2294,20 @@ dbPathInput?.addEventListener('blur', handleManualPathCommit);
 dbPathInput?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    dbPathInput.blur(); // Déclenche la validation
+    dbPathInput.blur();
   }
 });
 
-// Bouton Dossier pour sélectionner un fichier .json libre via l'explorateur
 document.getElementById('btn-browse-file')?.addEventListener('click', async () => {
   if (!window.tabula.selectDataFile) return;
   const res = await window.tabula.selectDataFile();
-  if (!res) return; // Annulé par l'utilisateur
+  if (!res) return;
 
-  // Si le fichier n'est pas un JSON Tabula valide
   if (!res.valid) {
     document.getElementById('incompatible-file-modal')?.classList.add('active');
     return;
   }
 
-  // Si le fichier est valide : mise à jour du chemin et chargement immédiat des comptes dans les paramètres
   tempDataPath = res.path;
   if (dbPathInput) dbPathInput.value = res.path;
 
@@ -2566,24 +2317,19 @@ document.getElementById('btn-browse-file')?.addEventListener('click', async () =
   renderSettingsCategories();
 });
 
-// Bouton Ouvrir le dossier actuel dans l'OS
 document.getElementById('btn-open-folder')?.addEventListener('click', () => {
   window.tabula.openDataFolder();
 });
 
-// Bouton fermer de la modale fichier incompatible
 document.getElementById('close-incompatible-btn')?.addEventListener('click', () => {
   document.getElementById('incompatible-file-modal')?.classList.remove('active');
 });
-
-
-// Onglet mises à jour
 
 const updateStage = document.getElementById('update-stage');
 
 function resetUpdateView() {
   if (!updateStage) return;
-  
+
   const currentVerText = globalAppVersion ? `v${globalAppVersion}` : '';
 
   updateStage.innerHTML = `
@@ -2596,7 +2342,7 @@ function resetUpdateView() {
 
 async function runUpdateCheck() {
   const btn = document.getElementById('btn-check-update') || document.getElementById('btn-retry-update');
-  
+
   if (btn) {
     btn.style.width = `${btn.offsetWidth}px`;
     btn.disabled = true;
@@ -2622,7 +2368,7 @@ async function runUpdateCheck() {
     updateStage.innerHTML = `
       <svg class="icon icon-illu"><use href="icons.svg#icon-illu-delivery"></use></svg>
       <p class="update-text">Une version plus récente est disponible !</p>
-      
+
       <!-- La structure officielle sans aucun style en ligne -->
       <div class="settings-cards-group">
         <div class="settings-card">
@@ -2647,38 +2393,22 @@ async function runUpdateCheck() {
   `;
 }
 
-
-// ======================================================================
-// WIP
-// ======================================================================
-
 const wipModal = document.getElementById('wip-modal');
 document.getElementById('nav-analytics-btn').addEventListener('click', () => wipModal.classList.add('active'));
 document.getElementById('nav-export-btn').addEventListener('click', () => wipModal.classList.add('active'));
 document.getElementById('close-wip-btn').addEventListener('click', () => wipModal.classList.remove('active'));
 
-
-// ======================================================================
-// FERMETURE DES MODALES (CLIC EXTÉRIEUR)
-// ======================================================================
-
 document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
   backdrop.addEventListener('click', (e) => {
     if (e.target !== backdrop) return;
-    
+
     if (backdrop.id === 'operation-modal') closeOpModal();
-    else if (backdrop.id === 'settings-modal') {
-      // Cette modale ne se ferme pas au clic extérieur
+    else if (backdrop.id !== 'settings-modal') {
+      if (backdrop.id === 'delete-modal') deletingTransactionId = null;
+      backdrop.classList.remove('active');
     }
-    else if (backdrop.id === 'delete-modal') { backdrop.classList.remove('active'); deletingTransactionId = null; }
-    else backdrop.classList.remove('active');
   });
 });
-
-
-// ======================================================================
-// RACCOURCIS GLOBAUX
-// ======================================================================
 
 document.addEventListener('keydown', (e) => {
 
@@ -2777,11 +2507,6 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-
-// ======================================================================
-// BLOCAGE DU SCROLL (MODALES OUVERTES)
-// ======================================================================
-
 window.addEventListener('wheel', (e) => {
   const activeModal = document.querySelector('.modal-backdrop.active');
   if (!activeModal) return;
@@ -2793,11 +2518,6 @@ window.addEventListener('wheel', (e) => {
 
   e.preventDefault();
 }, { passive: false });
-
-
-// ======================================================================
-// INIT.
-// ======================================================================
 
 async function loadApp() {
   db = await window.tabula.getData();
@@ -2819,10 +2539,10 @@ async function loadApp() {
 
   if (window.tabula.getVersion) {
     const version = await window.tabula.getVersion();
-    db._appVersion = version; 
-    
+    db._appVersion = version;
+
     document.getElementById('app-version').innerText = `v${version}`;
-    
+
     const updateVersionEl = document.getElementById('update-current-version');
     if (updateVersionEl) {
       updateVersionEl.innerText = `v${version}`;
@@ -2831,7 +2551,6 @@ async function loadApp() {
 
   await refreshDataPathDisplay();
 
-  // Détection du fichier manquant au démarrage
   if (window.tabula.getMissingPath) {
     const missing = await window.tabula.getMissingPath();
     if (missing) {
@@ -2844,7 +2563,6 @@ async function loadApp() {
   renderTransactions();
   renderPendingRecurrences();
 }
-
 
 document.getElementById('close-missing-file-btn')?.addEventListener('click', () => {
   document.getElementById('missing-file-modal')?.classList.remove('active');

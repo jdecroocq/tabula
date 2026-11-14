@@ -33,10 +33,6 @@
   font-weight: 700;
 }
 
-/* ==================================================================== */
-/* BASE */
-/* ==================================================================== */
-
 * {
   box-sizing: border-box;
   margin: 0;
@@ -166,10 +162,6 @@ h3 {
 
 .icon-green { color: var(--color-green) !important; }
 
-/* ==================================================================== */
-/* MISE EN PAGE GÉNÉRALE */
-/* ==================================================================== */
-
 .app-header {
   position: sticky;
   top: 0;
@@ -202,10 +194,6 @@ h3 {
   font-weight: 500;
   margin-left: -2px;
 }
-
-/* ==================================================================== */
-/* BOUTONS */
-/* ==================================================================== */
 
 .btn {
   appearance: none;
@@ -301,10 +289,6 @@ h3 {
   padding-left: 0;
 }
 
-/* ==================================================================== */
-/* CHAMPS DE FORMULAIRE */
-/* ==================================================================== */
-
 .input-group {
   display: flex;
   flex-direction: column;
@@ -377,9 +361,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   pointer-events: none;
 }
 
-/* ==================================================================== */
-/* MENUS DÉROULANTS PERSONNALISÉS */
-/* ==================================================================== */
+.input-date:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.input-group label .label-hint {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--color-4);
+  margin-left: 2px;
+}
 
 .custom-select {
   position: relative;
@@ -507,9 +499,31 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   border-color: var(--color-red);
 }
 
-/* ==================================================================== */
-/* SÉLECTEUR DE TYPE (Dépense / Recette / Virement) */
-/* ==================================================================== */
+#payee-suggestions .select-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+#payee-suggestions .rule-suggestion-key {
+  color: var(--color-6);
+}
+
+#payee-suggestions .rule-suggestion-name {
+  color: var(--color-4);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#payee-suggestions .select-option:hover .rule-suggestion-name,
+#payee-suggestions .select-option.selected .rule-suggestion-name,
+#payee-suggestions .select-option:hover .rule-suggestion-key,
+#payee-suggestions .select-option.selected .rule-suggestion-key {
+  color: var(--color-5);
+}
 
 .type-segmented-control {
   display: flex;
@@ -546,10 +560,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 #group-to-account {
   display: none;
 }
-
-/* ==================================================================== */
-/* CAROUSEL DES SOLDES */
-/* ==================================================================== */
 
 .carousel-card {
   width: 100%;
@@ -646,10 +656,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 1;
 }
 
-/* ==================================================================== */
-/* BARRE DE RECHERCHE */
-/* ==================================================================== */
-
 .search-bar {
   position: relative;
   width: 420px;
@@ -672,10 +678,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   color: var(--color-4);
   pointer-events: none;
 }
-
-/* ==================================================================== */
-/* TABLEAU DES OPÉRATIONS & ÉTAT VIDE */
-/* ==================================================================== */
 
 .col-date     { width: 110px; }
 .col-category { width: 18%; }
@@ -820,9 +822,127 @@ tr.expanded .note-text {
   border-top: var(--border);
 }
 
-/* ==================================================================== */
-/* MENU CONTEXTUEL (clic droit) */
-/* ==================================================================== */
+.recurrences-card {
+  display: flex;
+  background: var(--color-1);
+  border: var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  width: 100%;
+}
+
+.recurrences-summary {
+  width: 35%;
+  flex-shrink: 0;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-right: 1px solid var(--color-3); 
+}
+
+.summary-text h3 {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--color-6);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summary-text p {
+  font-size: 0.85rem;
+  line-height: 1.3;
+  color: var(--color-4);
+}
+
+.recurrences-actions-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 24px; 
+}
+
+.recurrences-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px; 
+}
+
+.recurrence-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0; 
+  border: none !important;
+}
+
+.recurrence-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.recurrence-title {
+  font-weight: 500;
+  color: var(--color-6);
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recurrence-meta {
+  font-size: 0.75rem;
+  color: var(--color-4);
+  font-family: var(--font-mono);
+}
+
+.recurrence-amount {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+.recurrence-amount.positive { color: var(--color-green); }
+.recurrence-amount.negative { color: var(--color-red); }
+
+.recurrence-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.recurrences-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  margin-top: auto; 
+  padding-top: 24px; 
+}
+
+.recurrences-card.mode-single .recurrences-footer {
+  display: none;
+}
+
+.recurrences-card.mode-single .recurrences-summary .icon-illu {
+  display: none;
+}
+
+.recurrences-card.mode-single .recurrences-summary {
+  padding: 16px 32px;
+  justify-content: center;
+}
+
+.recurrences-card.mode-single .recurrence-row {
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
 
 .context-menu {
   position: fixed;
@@ -862,10 +982,6 @@ tr.expanded .note-text {
   height: 20px;
   color: inherit;
 }
-
-/* ==================================================================== */
-/* MODALES (structure générique) */
-/* ==================================================================== */
 
 .modal-backdrop {
   position: fixed;
@@ -929,9 +1045,9 @@ tr.expanded .note-text {
   margin-top: 4px;
 }
 
-/* ==================================================================== */
-/* MODALE DES PARAMÈTRES */
-/* ==================================================================== */
+#freq-modal .modal-body {
+  margin-top: 16px;
+}
 
 .modal-card.modal-settings {
   max-width: var(--modal-lg);
@@ -1066,10 +1182,6 @@ tr.expanded .note-text {
   font-size: 0.85rem;
   line-height: 1.3;
 }
-
-/* ==================================================================== */
-/* LIGNES DE PARAMÈTRES (COMPTES, CATÉGORIES, RÈGLES, RÉCURRENCES)      */
-/* ==================================================================== */
 
 .settings-row-actions {
   display: flex;
@@ -1239,94 +1351,6 @@ tr.expanded .note-text {
   max-width: 240px;
 }
 
-/* ==================================================================== */
-/* GESTIONNAIRE DE MISE À JOUR                                          */
-/* ==================================================================== */
-.update-current-line {
-  font-size: 0.9rem;
-  color: var(--color-6);
-  margin: 0 0 16px 0;
-}
-
-.update-center-stage {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 16px;
-  min-height: 240px;
-  width: 100%;
-}
-
-.update-center-stage .settings-cards-group {
-  width: 100%;
-  margin-top: 8px;
-}
-
-.update-text {
-  font-size: 0.9rem;
-  color: var(--color-6);
-  line-height: 1.5;
-  margin: 0;
-  max-width: 440px;
-}
-
-/* ==================================================================== */
-/* DRAG & DROP - PARAMÈTRES (COMPTES & CATÉGORIES)                      */
-/* ==================================================================== */
-
-.drag-handle {
-  cursor: grab;
-}
-
-.drag-handle:active {
-  cursor: grabbing;
-}
-
-/* La carte fantôme (placeholder en pointillés) */
-.settings-row-placeholder {
-  height: 38px;
-  border: var(--border-dashed);
-  border-radius: var(--radius-md);
-  background: transparent;
-  box-sizing: border-box;
-}
-
-/* L'étiquette qu'on a "en main" */
-.settings-row.dragging {
-  position: fixed !important;
-  z-index: 9999;
-  pointer-events: none;
-  background: var(--color-1);
-  border: var(--border);
-  border-radius: var(--radius-md);
-  cursor: grabbing;
-}
-
-.settings-row.dragging * {
-  pointer-events: none;
-}
-
-/* Classe d'animation (modifiable à loisir : durée, easing, etc.) */
-.is-animating {
-  transition: transform 0.2s ease-out, top 0.2s ease-out, left 0.2s ease-out !important;
-}
-
-/* Désactive les survols de TOUS les éléments interactifs pendant le drag */
-body.is-dragging-active .settings-row:not(.dragging),
-body.is-dragging-active .settings-tab,
-body.is-dragging-active .btn,
-body.is-dragging-active .btn-dashed,
-body.is-dragging-active .settings-row-btn {
-  pointer-events: none;
-}
-
-/* ==================================================================== */
-/* RÈGLES - PARAMÈTRES                                                  */
-/* ==================================================================== */
-
 .settings-keyword-segment {
   width: 120px;
   display: flex;
@@ -1359,193 +1383,75 @@ body.is-dragging-active .settings-row-btn {
   display: inline-block;
 }
 
-/* ==================================================================== */
-/* CHAMPS DÉSACTIVÉS (ex: Date automatique dans les règles)             */
-/* ==================================================================== */
-
-.input-date:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-/* ==================================================================== */
-/* INDICATIONS DISCRÈTES DANS LES LABELS                                */
-/* ==================================================================== */
-
-.input-group label .label-hint {
-  font-weight: 400;
-  text-transform: none;
-  color: var(--color-4);
-  margin-left: 2px;
-}
-
-/* ==================================================================== */
-/* AUTO-COMPLÉTION DES RÈGLES (Description)                             */
-/* ==================================================================== */
-
-#payee-suggestions .select-option {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-#payee-suggestions .rule-suggestion-key {
+.update-current-line {
+  font-size: 0.9rem;
   color: var(--color-6);
+  margin: 0 0 16px 0;
 }
 
-#payee-suggestions .rule-suggestion-name {
-  color: var(--color-4);
-  font-size: 0.85rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#payee-suggestions .select-option:hover .rule-suggestion-name,
-#payee-suggestions .select-option.selected .rule-suggestion-name,
-#payee-suggestions .select-option:hover .rule-suggestion-key,
-#payee-suggestions .select-option.selected .rule-suggestion-key {
-  color: var(--color-5);
-}
-
-/* ==================================================================== */
-/* AJUSTEMENTS CIBLÉS POUR LA MODALE DE FRÉQUENCE                       */
-/* ==================================================================== */
-
-#freq-modal .modal-body {
-  margin-top: 16px;
-}
-
-/* ==================================================================== */
-/* PANNEAU DES RÉCURRENCES (ACCUEIL)                                    */
-/* ==================================================================== */
-
-.recurrences-card {
+.update-center-stage {
+  flex: 1;
   display: flex;
-  background: var(--color-1);
-  border: var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 16px;
+  min-height: 240px;
   width: 100%;
 }
 
-/* Colonne de gauche */
-.recurrences-summary {
-  width: 35%;
-  flex-shrink: 0;
-  padding: 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  border-right: 1px solid var(--color-3); 
+.update-center-stage .settings-cards-group {
+  width: 100%;
+  margin-top: 8px;
 }
 
-.summary-text h3 {
-  font-size: 1.1rem;
-  font-weight: 500;
+.update-text {
+  font-size: 0.9rem;
   color: var(--color-6);
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 440px;
 }
 
-.summary-text p {
-  font-size: 0.85rem;
-  line-height: 1.3;
-  color: var(--color-4);
+.drag-handle {
+  cursor: grab;
 }
 
-/* Colonne de droite */
-.recurrences-actions-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  padding: 24px; 
+.drag-handle:active {
+  cursor: grabbing;
 }
 
-.recurrences-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20px; 
+.settings-row-placeholder {
+  height: 38px;
+  border: var(--border-dashed);
+  border-radius: var(--radius-md);
+  background: transparent;
+  box-sizing: border-box;
 }
 
-/* Les lignes */
-.recurrence-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0; 
-  border: none !important;
+.settings-row.dragging {
+  position: fixed !important;
+  z-index: 9999;
+  pointer-events: none;
+  background: var(--color-1);
+  border: var(--border);
+  border-radius: var(--radius-md);
+  cursor: grabbing;
 }
 
-.recurrence-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
+.settings-row.dragging * {
+  pointer-events: none;
 }
 
-.recurrence-title {
-  font-weight: 500;
-  color: var(--color-6);
-  font-size: 0.95rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.is-animating {
+  transition: transform 0.2s ease-out, top 0.2s ease-out, left 0.2s ease-out !important;
 }
 
-.recurrence-meta {
-  font-size: 0.75rem;
-  color: var(--color-4);
-  font-family: var(--font-mono);
-}
-
-.recurrence-amount {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 1rem;
-  white-space: nowrap;
-}
-.recurrence-amount.positive { color: var(--color-green); }
-.recurrence-amount.negative { color: var(--color-red); }
-
-.recurrence-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-/* Le pied de page (boutons globaux) */
-.recurrences-footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 16px;
-  margin-top: auto; 
-  padding-top: 24px; 
-}
-/* ========================================= */
-/* MODE UNE SEULE OPÉRATION                  */
-/* ========================================= */
-
-.recurrences-card.mode-single .recurrences-footer {
-  display: none;
-}
-
-.recurrences-card.mode-single .recurrences-summary .icon-illu {
-  display: none;
-}
-
-.recurrences-card.mode-single .recurrences-summary {
-  padding: 16px 32px;
-  justify-content: center;
-}
-
-.recurrences-card.mode-single .recurrence-row {
-  padding-bottom: 0;
-  margin-bottom: 0;
+body.is-dragging-active .settings-row:not(.dragging),
+body.is-dragging-active .settings-tab,
+body.is-dragging-active .btn,
+body.is-dragging-active .btn-dashed,
+body.is-dragging-active .settings-row-btn {
+  pointer-events: none;
 }
