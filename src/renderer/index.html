@@ -9,37 +9,36 @@
 <body>
   <div class="app-viewport">
 
-  <header class="app-header">
-    <div class="header-brand">
-      <h1 class="brand-title font-serif">
-        Tabula
-        <span class="app-version text-muted" id="app-version"></span>
-      </h1>
-    </div>
+    <header class="app-header">
+      <div class="header-brand">
+        <h1 class="brand-title font-serif">
+          Tabula
+          <span class="app-version text-muted" id="app-version"></span>
+        </h1>
+      </div>
 
-    <div class="header-actions">
-      <button class="btn" id="nav-analytics-btn" title="Analyse financière">
-        <svg class="icon"><use href="icons.svg#icon-analytics"></use></svg>
-        <span>Analyse</span>
-      </button>
+      <div class="header-actions">
+        <button class="btn" id="nav-analytics-btn" title="Analyse financière">
+          <svg class="icon"><use href="icons.svg#icon-analytics"></use></svg>
+          <span>Analyse</span>
+        </button>
 
-      <button class="btn" id="nav-export-btn" title="Exporter des rapports">
-        <svg class="icon"><use href="icons.svg#icon-file-export"></use></svg>
-        <span>Rapports</span>
-      </button>
+        <button class="btn" id="nav-export-btn" title="Exporter des rapports">
+          <svg class="icon"><use href="icons.svg#icon-contract"></use></svg>
+          <span>Rapports</span>
+        </button>
 
-      <button class="btn" id="nav-settings-btn" title="Paramètres">
-        <svg class="icon"><use href="icons.svg#icon-settings"></use></svg>
-        <span>Paramètres</span>
-      </button>
+        <button class="btn" id="nav-settings-btn" title="Paramètres">
+          <svg class="icon"><use href="icons.svg#icon-settings"></use></svg>
+          <span>Paramètres</span>
+        </button>
 
-      <button class="btn btn-primary" id="open-new-op-btn">
-        <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
-        <span>Nouvelle opération</span>
-      </button>
-    </div>
-  </header>
-
+        <button class="btn btn-primary" id="open-new-op-btn">
+          <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
+          <span>Nouvelle opération</span>
+        </button>
+      </div>
+    </header>
 
     <main class="main-layout">
 
@@ -50,6 +49,30 @@
         </div>
         <div class="carousel-dots-wrapper">
           <div class="carousel-dots" id="carousel-dots"></div>
+        </div>
+      </div>
+
+      <!-- Panel récurrences -->
+      <div class="recurrences-card" id="recurrences-panel" style="display: none;">
+        <div class="recurrences-summary">
+          <svg class="icon icon-illu"><use href="icons.svg#icon-illu-recurrence"></use></svg>
+          
+          <div class="summary-text">
+            <h3>Opérations à valider</h3>
+            <p id="recurrences-count-text">0 suggestions de récurrences à confirmer.</p>
+          </div>
+        </div>
+        <div class="recurrences-actions-area">
+          <div class="recurrences-list" id="recurrences-list">
+            <!-- Les lignes seront injectées ici par le JS -->
+          </div>
+          <div class="recurrences-footer">
+            <button type="button" class="btn" id="btn-ignore-all">Tout ignorer</button>
+            <button type="button" class="btn btn-primary" id="btn-validate-all">
+              <svg class="icon"><use href="icons.svg#icon-check"></use></svg>
+              <span>Tout valider</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -115,7 +138,7 @@
               <span>Récurrences</span>
             </button>
             <button class="settings-tab" data-target="tab-rules">
-              <svg class="icon"><use href="icons.svg#icon-arrow-split"></use></svg>
+              <svg class="icon"><use href="icons.svg#icon-wand"></use></svg>
               <span>Règles</span>
             </button>
             <button class="settings-tab" data-target="tab-backup">
@@ -165,31 +188,31 @@
               <span>Ajouter une catégorie</span>
             </button>
           </div>
-
+          
           <!-- Onglet récurrences -->
           <div class="settings-pane" id="tab-recurrence">
             <div class="pane-header">
               <h3>Opérations récurrentes</h3>
               <p class="text-muted">Automatisez la saisie de vos charges fixes et abonnements.</p>
             </div>
-            <div class="settings-wip-card">
-              <svg class="icon icon-illu"><use href="icons.svg#icon-illu-dev"></use></svg>
-              <div class="wip-title">En cours de développement</div>
-              <p class="text-muted">La planification automatique des écritures sera intégrée dans une prochaine mise à jour.</p>
-            </div>
+            <div class="settings-list" id="settings-recurrences-list"></div>
+            <button type="button" class="btn btn-dashed" id="settings-add-recurrence-btn">
+              <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
+              <span>Ajouter une récurrence</span>
+            </button>
           </div>
 
           <!-- Onglet règles -->
           <div class="settings-pane" id="tab-rules">
             <div class="pane-header">
               <h3>Règles d'automatisation</h3>
-              <p class="text-muted">Pré-remplissez vos formulaires selon des mots-clés de description.</p>
+              <p class="text-muted">Pré-remplissez vos formulaires selon des mots-clés.</p>
             </div>
-            <div class="settings-wip-card">
-              <svg class="icon icon-illu"><use href="icons.svg#icon-illu-dev"></use></svg>
-              <div class="wip-title">En cours de développement</div>
-              <p class="text-muted">L'auto-complétion intelligente sera disponible prochainement.</p>
-            </div>
+            <div class="settings-list" id="settings-rules-list"></div>
+            <button type="button" class="btn btn-dashed" id="settings-add-rule-btn">
+              <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
+              <span>Ajouter une règle</span>
+            </button>
           </div>
 
           <!-- Onglet données -->
@@ -263,7 +286,6 @@
             </div>
           </div>
 
-
           <!-- Onglet mise à jour -->
           <div class="settings-pane" id="tab-update">
             <div class="pane-header">
@@ -277,7 +299,6 @@
 
             <div id="update-stage" class="update-center-stage"></div>
           </div>
-
 
         </div>
       </div>
@@ -328,9 +349,16 @@
             <input type="date" id="op-date" class="input-date">
           </div>
         </div>
-        <div class="input-group" id="group-payee">
-          <label>Description</label>
+        <div class="input-group" id="group-payee" style="position: relative;">
+          <label>Description <span class="label-hint">(tapez / pour les règles)</span></label>
           <input type="text" id="op-payee" class="input-text" placeholder="Motif, tiers, période..." autocomplete="off">
+          
+          <!-- Menu d'auto-complétion pour les règles -->
+          <div class="custom-select open" id="payee-suggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; z-index: 10;">
+            <div class="select-menu" style="display: flex; max-height: 200px;">
+              <!-- Les options seront injectées ici par le JS -->
+            </div>
+          </div>
         </div>
         <div class="form-row">
           <div class="input-group">
@@ -466,6 +494,94 @@
       <p class="text-muted">Ce module sera disponible dans une prochaine mise à jour.</p>
       <div class="modal-footer">
         <button type="button" class="btn btn-primary" id="close-wip-btn">Compris</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modale de configuration de fréquence -->
+  <div class="modal-backdrop" id="freq-modal">
+    <div class="modal-card modal-sm">
+      <h2>Configuration de la fréquence</h2>
+      
+      <div class="modal-body">
+        <div class="input-group">
+          <label>Type</label>
+          <div class="custom-select" id="freq-type-select">
+            <button type="button" class="select-trigger">
+              <span class="select-label">Mensuel</span>
+              <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+            </button>
+            <div class="select-menu">
+              <div class="select-option selected" data-value="monthly">Mensuel</div>
+              <div class="select-option" data-value="yearly">Annuel</div>
+              <div class="select-option" data-value="weekly">Hebdomadaire</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="freq-monthly-fields" class="form-row">
+          <div class="input-group">
+            <label>Jour</label>
+            <div class="custom-select" id="freq-day-of-month">
+              <button type="button" class="select-trigger">
+                <span class="select-label">1</span>
+                <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+              </button>
+              <div class="select-menu"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="freq-yearly-fields" class="form-row" style="display: none;">
+          <div class="input-group">
+            <label>Jour</label>
+            <div class="custom-select" id="freq-day-of-year">
+              <button type="button" class="select-trigger">
+                <span class="select-label">1</span>
+                <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+              </button>
+              <div class="select-menu"></div>
+            </div>
+          </div>
+          <div class="input-group">
+            <label>Mois</label>
+            <div class="custom-select" id="freq-month-of-year">
+              <button type="button" class="select-trigger">
+                <span class="select-label">Janvier</span>
+                <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+              </button>
+              <div class="select-menu"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="freq-weekly-fields" class="input-group" style="display: none;">
+          <label>Jour</label>
+          <div class="custom-select" id="freq-day-of-week">
+            <button type="button" class="select-trigger">
+              <span class="select-label">Lundi</span>
+              <svg class="icon"><use href="icons.svg#icon-chevron-right"></use></svg>
+            </button>
+            <div class="select-menu">
+              <div class="select-option selected" data-value="1">Lundi</div>
+              <div class="select-option" data-value="2">Mardi</div>
+              <div class="select-option" data-value="3">Mercredi</div>
+              <div class="select-option" data-value="4">Jeudi</div>
+              <div class="select-option" data-value="5">Vendredi</div>
+              <div class="select-option" data-value="6">Samedi</div>
+              <div class="select-option" data-value="0">Dimanche</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="form-hint">
+          Les jours inexistants sont rabattus sur le dernier jour du mois.
+        </p>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn" id="cancel-freq-btn">Annuler</button>
+        <button type="button" class="btn btn-primary" id="save-freq-btn">Valider</button>
       </div>
     </div>
   </div>

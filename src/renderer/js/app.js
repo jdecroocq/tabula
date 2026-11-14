@@ -2,7 +2,15 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 
 let globalAppVersion = '';
 
-let db = { accounts: [], categories: [], transactions: [] };
+let db = { 
+  accounts: [], 
+  categories: [], 
+  transactions: [], 
+  rules: [], 
+  recurrences: [], 
+  pending_recurrences: [], 
+  last_opened: null 
+};
 let searchQuery = '';
 let currentOpType = 'expense';
 
@@ -12,6 +20,107 @@ let modalMode = 'create';
 let editingTransactionId = null;
 let deletingTransactionId = null;
 let contextMenuTxId = null;
+
+let editingRecurrenceIndex = null;
+let savedDataPath = '';
+let tempDataPath = '';
+
+
+// ======================================================================
+// MOTEUR DE CALCUL DES RÉCURRENCES
+// ======================================================================
+
+function getOccurrencesBetween(startDateStr, endDateStr, frequency) {
+  const occurrences = [];
+  const start = new Date(startDateStr + 'T12:00:00');
+  const end = new Date(endDateStr + 'T12:00:00');
+
+  if (isNaN(start) || isNaN(end) || start >= end) return occurrences;
+
+  let current = new Date(start);
+  current.setDate(current.getDate() + 1); // On commence le lendemain
+
+  while (current <= end) {
+    let isMatch = false;
+
+    if (frequency.type === 'weekly') {
+      if (current.getDay() === frequency.day) isMatch = true;
+    } 
+    else if (frequency.type === 'monthly') {
+      const lastDayOfMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
+      const targetDay = Math.min(frequency.day, lastDayOfMonth);
+      if (current.getDate() === targetDay) isMatch = true;
+    } 
+    else if (frequency.type === 'yearly') {
+      if (current.getMonth() === frequency.month && current.getDate() === frequency.day) {
+        isMatch = true;
+      }
+      // Gestion du 29 février (année non bissextile)
+      if (frequency.month === 1 && frequency.day === 29 && current.getMonth() === 1 && current.getDate() === 28) {
+        const nextYear = new Date(current.getFullYear(), 2, 0);
+        if (nextYear.getDate() !== 29) isMatch = true;
+      }
+    }
+
+    if (isMatch) {
+      const y = current.getFullYear();
+      const m = String(current.getMonth() + 1).padStart(2, '0');
+      const d = String(current.getDate()).padStart(2, '0');
+      occurrences.push(`${y}-${m}-${d}`);
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return occurrences;
+}
+
+async function checkRecurrences() {
+  const now = new Date();
+  const nowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  
+  if (!db.last_opened) {
+    await window.tabula.updateLastOpened(nowStr);
+    db.last_opened = nowStr;
+    return;
+  }
+
+  if (db.last_opened === nowStr) return;
+
+  let newPending = [...(db.pending_recurrences || [])];
+
+  db.recurrences.forEach(rec => {
+    const dates = getOccurrencesBetween(db.last_opened, nowStr, rec.frequency);
+    
+    dates.forEach(dateStr => {
+      const alreadyPending = newPending.some(p => p.recurrence_id === rec.id && p.date === dateStr);
+      
+      if (!alreadyPending) {
+        newPending.push({
+          id: 'pend_' + crypto.randomUUID(),
+          recurrence_id: rec.id,
+          date: dateStr,
+          type: rec.type,
+          amount_cents: rec.amount_cents,
+          account_id: rec.account_id,
+          to_account_id: rec.to_account_id || null,
+          category_id: rec.category_id || null,
+          payee: rec.payee || '',
+          note: rec.note || ''
+        });
+      }
+    });
+  });
+
+  if (newPending.length > (db.pending_recurrences || []).length) {
+    db.pending_recurrences = newPending;
+    await window.tabula.updatePendingRecurrences(newPending);
+  }
+
+  await window.tabula.updateLastOpened(nowStr);
+  db.last_opened = nowStr;
+}
+
 
 // ======================================================================
 // OUTILS GÉNÉRIQUES
@@ -28,6 +137,16 @@ function formatDate(isoDate) {
   if (!isoDate) return '--/--/----';
   const [year, month, day] = isoDate.split('-');
   return `${day}/${month}/${year}`;
+}
+
+// Échappement HTML pour tout ce qui est injecté dans un innerHTML
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // Recherche : normalisation du texte (accents, casse)
@@ -183,11 +302,27 @@ function setupCharCounter(segmentEl, inputEl, maxLimit, onCommit) {
   });
 }
 
+
+// ======================================================================
+// MENUS DÉROULANTS PERSONNALISÉS (CUSTOM SELECTS)
+// ======================================================================
+// Fonction utilitaire pour sélectionner une valeur dans un custom-select
+function selectDropdownValue(selector, value) {
+  const select = document.querySelector(selector);
+  if (!select) return;
+  const option = select.querySelector(`.select-option[data-value="${value}"]`);
+  if (option) {
+    selectOption(select, option);
+  }
+}
+
 // Menus déroulants personnalisés (custom selects)
 function initCustomSelects() {
   document.querySelectorAll('.custom-select').forEach(select => {
     const trigger = select.querySelector('.select-trigger');
     const menu = select.querySelector('.select-menu');
+
+    if (!trigger || !menu) return; 
 
     // Clic déclencheur : Ouvrir / Fermer
     trigger.onclick = (e) => {
@@ -293,7 +428,7 @@ function closeCustomSelect(select) {
   }
 }
 
-// Valider la selection d'une option
+// Valide la sélection d'une option
 function selectOption(select, option) {
   const label = select.querySelector('.select-label');
   const menu = select.querySelector('.select-menu');
@@ -312,7 +447,7 @@ function selectOption(select, option) {
   closeCustomSelect(select);
 }
 
-// filtre des option
+// Filtre les options d'après la recherche
 function filterSelectOptions(menu, query) {
   const cleanQuery = query.toLowerCase().trim();
   const options = Array.from(menu.querySelectorAll('.select-option:not(.select-no-result)'));
@@ -343,6 +478,119 @@ window.addEventListener('click', () => {
   document.querySelectorAll('.custom-select.open').forEach(s => closeCustomSelect(s));
 });
 
+
+// ======================================================================
+// AUTO-COMPLÉTION DES RÈGLES
+// ======================================================================
+const payeeInput = document.getElementById('op-payee');
+const suggestionsMenu = document.getElementById('payee-suggestions');
+const suggestionsList = suggestionsMenu.querySelector('.select-menu');
+let selectedSuggestionIndex = -1;
+
+payeeInput.addEventListener('input', () => {
+  if (modalMode === 'rule') {
+    suggestionsMenu.style.display = 'none';
+    return; // On ne fait rien si on configure une règle
+  }
+  
+  const val = payeeInput.value;
+  
+  // Si ça commence par / et qu'il n'y a pas d'espace, on affiche le menu
+  if (val.startsWith('/') && !val.includes(' ')) {
+    const query = val.substring(1).toLowerCase();
+    const matchingRules = db.rules.filter(r => r.keyword && r.keyword.toLowerCase().startsWith(query));
+
+    suggestionsList.innerHTML = '';
+
+    if (matchingRules.length === 0) {
+      suggestionsList.innerHTML = '<div class="select-option select-no-result">Aucune règle</div>';
+    } else {
+      matchingRules.forEach((rule, idx) => {
+        const option = document.createElement('div');
+        option.className = 'select-option';
+        if (idx === 0) selectedSuggestionIndex = 0; // On sélectionne la première par défaut
+        option.innerHTML = `
+          <span class="rule-suggestion-key">/${escapeHtml(rule.keyword)}</span>
+          <span class="rule-suggestion-name">${escapeHtml(rule.name || 'Sans nom')}</span>
+        `;
+        option.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // Empêche le blur du champ input
+          applyRuleSuggestion(rule);
+        });
+        suggestionsList.appendChild(option);
+      });
+    }
+
+    suggestionsMenu.style.display = 'block';
+  } else {
+    suggestionsMenu.style.display = 'none';
+    selectedSuggestionIndex = -1;
+  }
+});
+
+// Fermer le menu si on clique ailleurs
+document.addEventListener('click', (e) => {
+  if (e.target !== payeeInput && !suggestionsMenu.contains(e.target)) {
+    suggestionsMenu.style.display = 'none';
+  }
+});
+
+// Gestion du clavier (Entrée / Flèches / Échap)
+payeeInput.addEventListener('keydown', (e) => {
+  if (modalMode === 'rule') return;
+  if (suggestionsMenu.style.display === 'none') return;
+
+  const options = suggestionsList.querySelectorAll('.select-option:not(.select-no-result)');
+  if (options.length === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectedSuggestionIndex = (selectedSuggestionIndex + 1) % options.length;
+    updateSuggestionFocus(options);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectedSuggestionIndex = (selectedSuggestionIndex - 1 + options.length) % options.length;
+    updateSuggestionFocus(options);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const activeOption = options[selectedSuggestionIndex];
+    if (activeOption) {
+      activeOption.dispatchEvent(new Event('mousedown'));
+    }
+  } else if (e.key === 'Escape') {
+    suggestionsMenu.style.display = 'none';
+  }
+});
+
+function updateSuggestionFocus(options) {
+  options.forEach((opt, idx) => {
+    opt.classList.toggle('selected', idx === selectedSuggestionIndex);
+  });
+}
+
+function applyRuleSuggestion(rule) {
+  // 1. Remplir les champs
+  setType(rule.type || 'expense');
+  
+  if (rule.amount_cents > 0) {
+    document.getElementById('op-amount').value = formatMoneyInput(rule.amount_cents);
+  }
+  
+  if (rule.account_id) selectDropdownValue('#op-account', rule.account_id);
+  if (rule.to_account_id) selectDropdownValue('#op-to-account', rule.to_account_id);
+  if (rule.category_id) selectDropdownValue('#op-category', rule.category_id);
+  
+  if (rule.note) document.getElementById('op-note').value = rule.note;
+  
+  // 2. Remplacer le texte tapé par la vraie description de la règle
+  payeeInput.value = rule.payee || '';
+  
+  // 3. Fermer le menu
+  suggestionsMenu.style.display = 'none';
+  payeeInput.focus();
+}
+
+
 // ======================================================================
 // THÈME
 // ======================================================================
@@ -368,6 +616,7 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e
     document.body.classList.toggle('light-mode', e.matches);
   }
 });
+
 
 // ======================================================================
 // DONNÉES & SOLDES
@@ -396,6 +645,7 @@ function calculateBalances() {
   };
 }
 
+
 // ======================================================================
 // CAROUSEL DES SOLDES
 // ======================================================================
@@ -413,18 +663,21 @@ let snapTimeout = null;
 let isAutoRotating = true;
 let totalRealSlides = 0;
 
-function renderBalanceCarousel() {
-  const track = document.getElementById('carousel-track');
-  const dotsContainer = document.getElementById('carousel-dots');
+function getCarouselSlidesData() {
   const balances = calculateBalances();
-
-  const slidesData = [
-    { title: "Solde total", balance: balances.total },
+  return [
+    { title: 'Solde total', balance: balances.total },
     ...db.accounts.map(acc => ({
       title: `Compte • ${acc.name}`,
       balance: balances.byAccount[acc.id] || 0
     }))
   ];
+}
+
+function renderBalanceCarousel() {
+  const track = document.getElementById('carousel-track');
+  const dotsContainer = document.getElementById('carousel-dots');
+  const slidesData = getCarouselSlidesData();
 
   totalRealSlides = slidesData.length;
 
@@ -464,12 +717,48 @@ function renderBalanceCarousel() {
   setupCarouselSwipe(track);
 }
 
+// Met à jour les chiffres du carrousel en direct sans recharger les slides ni sauter
+function updateBalanceCarouselValues() {
+  const track = document.getElementById('carousel-track');
+  if (!track || !track.children.length) {
+    renderBalanceCarousel();
+    return;
+  }
+
+  const slidesData = getCarouselSlidesData();
+
+  const totalSlides = slidesData.length;
+  if (totalSlides <= 1) return;
+
+  // Données ordonnées avec les clones [Dernier, ...Vrais, Premier]
+  const renderData = [
+    slidesData[totalSlides - 1],
+    ...slidesData,
+    slidesData[0]
+  ];
+
+  // Met à jour uniquement le texte du montant de chaque slide existante
+  Array.from(track.children).forEach((slideEl, idx) => {
+    const slide = renderData[idx];
+    if (!slide) return;
+
+    const formatted = formatMoney(slide.balance).replace(/[\u202F\u00A0]/g, ' ');
+    const [amount, currency] = formatted.split(/\s(?=[^\s]+$)/);
+    
+    const amountEl = slideEl.querySelector('.slide-amount');
+    if (amountEl) {
+      amountEl.innerHTML = `${amount} <span class="slide-currency">${currency}</span>`;
+    }
+  });
+}
+
+
 function createSlideHTML(slide) {
   const formatted = formatMoney(slide.balance).replace(/[\u202F\u00A0]/g, ' ');
   const [amount, currency] = formatted.split(/\s(?=[^\s]+$)/);
   return `
     <div class="carousel-slide">
-      <span class="slide-label">${slide.title}</span>
+      <span class="slide-label">${escapeHtml(slide.title)}</span>
       <div class="slide-amount">
         ${amount} <span class="slide-currency">${currency}</span>
       </div>
@@ -597,6 +886,7 @@ function setupCarouselSwipe(track) {
   };
 }
 
+
 // ======================================================================
 // TABLEAU DES OPÉRATIONS (recherche et rendu)
 // ======================================================================
@@ -620,7 +910,6 @@ function renderTransactions() {
 
   // Recherche globale
   if (searchQuery) {
-    // Découpe la recherche en mots individuels sans accents
     const queryTokens = normalizeSearchText(searchQuery).split(/\s+/).filter(t => t.length > 0);
 
     list = list.filter(tx => {
@@ -628,7 +917,6 @@ function renderTransactions() {
       const account = db.accounts.find(a => a.id === tx.account_id);
       const toAccount = tx.to_account_id ? db.accounts.find(a => a.id === tx.to_account_id) : null;
 
-      // Crée une "super-chaîne" contenant tout ce qui concerne cette opération
       const fullRowText = [
         tx.payee,
         tx.note,
@@ -643,8 +931,6 @@ function renderTransactions() {
       ].join(' ');
 
       const normalizedRow = normalizeSearchText(fullRowText);
-
-      // ET logique
       return queryTokens.every(token => normalizedRow.includes(token));
     });
   }
@@ -694,36 +980,32 @@ function renderTransactions() {
       amountClass = 'negative';
       sign = '- ';
     } else if (tx.type === 'transfer') {
-      // Libellé "vers" pour les virements
       const fromName = account ? account.name : '--';
       const toName = toAccount ? toAccount.name : '--';
       accountDisplay = `${fromName} vers ${toName}`;
     }
 
-    // Gestion du texte de commentaire
     const hasNote = tx.note && tx.note.trim() !== '';
-    const noteContent = hasNote ? tx.note : 'Aucun commentaire';
+    const noteContent = hasNote ? escapeHtml(tx.note) : 'Aucun commentaire';
     const noteClass = hasNote ? 'note-text' : 'note-text empty-note';
 
     tr.innerHTML = `
       <td class="font-mono text-muted">${formatDate(tx.date)}</td>
       <td>
         <div class="cell-description">
-          <span class="truncate-text desc-text">${tx.payee || '-'}</span>
+          <span class="truncate-text desc-text">${escapeHtml(tx.payee) || '-'}</span>
           <span class="${noteClass}">${noteContent}</span>
         </div>
       </td>
-      <td class="text-muted"><span>${categoryDisplay}</span></td>
-      <td class="text-muted"><span>${accountDisplay}</span></td>
+      <td class="text-muted"><span>${escapeHtml(categoryDisplay)}</span></td>
+      <td class="text-muted"><span>${escapeHtml(accountDisplay)}</span></td>
       <td class="amount ${amountClass}" style="text-align: right;">${sign}${formatMoney(tx.amount_cents)}</td>
     `;
 
-    // Déplier
     tr.addEventListener('click', () => {
       tr.classList.toggle('expanded');
     });
 
-    // Clic droit i.e. menu contextuel
     tr.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openContextMenu(e.clientX, e.clientY, tx.id);
@@ -737,6 +1019,149 @@ document.getElementById('load-more-btn').addEventListener('click', () => {
   visibleCount += 50;
   renderTransactions();
 });
+
+
+// ======================================================================
+// GESTION DES RÉCURRENCES EN ATTENTE (ACCUEIL)
+// ======================================================================
+function renderPendingRecurrences() {
+  const panel = document.getElementById('recurrences-panel');
+  const list = document.getElementById('recurrences-list');
+  const countText = document.getElementById('recurrences-count-text');
+  
+  const pending = db.pending_recurrences || [];
+
+  // Si vide, on cache le panneau
+  if (pending.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  // Sinon on l'affiche
+  panel.style.display = 'flex';
+
+  // --- LOGIQUE D'AFFICHAGE (MODE 1 ou PLUSIEURS) ---
+  const titleEl = panel.querySelector('.summary-text h3');
+  const iconEl = panel.querySelector('.recurrences-summary .icon-illu');
+  const footerEl = panel.querySelector('.recurrences-footer');
+
+  if (pending.length === 1) {
+    panel.classList.add('mode-single');
+    titleEl.innerText = "Opération à valider";
+    countText.innerText = "1 suggestion de récurrence à confirmer.";
+    if (iconEl) iconEl.style.display = 'none';
+    if (footerEl) footerEl.style.display = 'none';
+  } else {
+    panel.classList.remove('mode-single');
+    titleEl.innerText = "Opérations à valider";
+    countText.innerText = `${pending.length} suggestions de récurrences à confirmer.`;
+    if (iconEl) iconEl.style.display = 'block';
+    if (footerEl) footerEl.style.display = 'flex';
+  }
+
+  list.innerHTML = '';
+
+  // --- GÉNÉRATION DES LIGNES ---
+  pending.forEach(item => {
+    const isIncome = item.type === 'income';
+    const sign = isIncome ? '+ ' : '- ';
+    const amountClass = isIncome ? 'positive' : 'negative';
+    
+    const row = document.createElement('div');
+    row.className = 'recurrence-row';
+
+    row.innerHTML = `
+      <div class="recurrence-info">
+        <div class="recurrence-title" title="${escapeHtml(item.payee || 'Sans description')}">
+          ${escapeHtml(item.payee || 'Sans description')}
+        </div>
+        <div class="recurrence-meta">${formatDate(item.date)}</div>
+      </div>
+      <div class="recurrence-amount ${amountClass}">
+        ${sign}${formatMoney(item.amount_cents)}
+      </div>
+      <div class="recurrence-buttons">
+        <button type="button" class="btn btn-square btn-ignore-single" title="Ignorer">
+          <svg class="icon"><use href="icons.svg#icon-close"></use></svg>
+        </button>
+        <button type="button" class="btn btn-square btn-validate-single" title="Valider">
+          <svg class="icon"><use href="icons.svg#icon-check"></use></svg>
+        </button>
+      </div>
+    `;
+
+    // --- ACTION : IGNORER UNE LIGNE ---
+    row.querySelector('.btn-ignore-single').addEventListener('click', async () => {
+      // 1. On retire l'élément de la liste en mémoire
+      db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
+      
+      // 2. On sauvegarde la nouvelle liste vide ou réduite en DB
+      await window.tabula.updatePendingRecurrences(db.pending_recurrences);
+      
+      // 3. On met à jour l'interface
+      renderPendingRecurrences();
+    });
+
+    // --- ACTION : VALIDER UNE LIGNE ---
+    row.querySelector('.btn-validate-single').addEventListener('click', async () => {
+      // 1. On prépare la transaction (on retire l'ID de récurrence)
+      const newTx = { ...item };
+      delete newTx.recurrence_id;
+      
+      // 2. On l'ajoute à la vraie base de données
+      const saved = await window.tabula.addTransaction(newTx);
+      
+      // 3. On l'ajoute à la liste en mémoire des transactions
+      db.transactions.unshift(saved);
+
+      // 4. On retire l'élément de la liste d'attente
+      db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
+      
+      // 5. On sauvegarde la nouvelle liste d'attente en DB
+      await window.tabula.updatePendingRecurrences(db.pending_recurrences);
+
+      // 6. On met à jour toutes les interfaces (panneau, tableau, soldes)
+      renderPendingRecurrences();
+      renderTransactions();
+      updateBalanceCarouselValues();
+    });
+
+    list.appendChild(row);
+  });
+
+  // --- BOUTONS GLOBAUX (Si > 1 opération) ---
+  if (pending.length > 1) {
+    // ACTION : TOUT IGNORER
+    document.getElementById('btn-ignore-all').onclick = async () => {
+      db.pending_recurrences = [];
+      await window.tabula.updatePendingRecurrences([]);
+      renderPendingRecurrences();
+    };
+
+    // ACTION : TOUT VALIDER
+    document.getElementById('btn-validate-all').onclick = async () => {
+      // On boucle sur toutes les opérations en attente
+      for (const item of pending) {
+        const newTx = { ...item };
+        delete newTx.recurrence_id;
+        
+        // On ajoute chaque transaction à la DB
+        const saved = await window.tabula.addTransaction(newTx);
+        db.transactions.unshift(saved);
+      }
+      
+      // Une fois toutes ajoutées, on vide la liste d'attente
+      db.pending_recurrences = [];
+      await window.tabula.updatePendingRecurrences([]);
+      
+      // On met à jour toutes les interfaces
+      renderPendingRecurrences();
+      renderTransactions();
+      updateBalanceCarouselValues();
+    };
+  }
+}
+
 
 // ======================================================================
 // MENU CONTEXTUEL (clic droit)
@@ -781,6 +1206,7 @@ contextMenu.querySelector('.action-delete').addEventListener('click', () => {
 
 window.addEventListener('click', closeContextMenu);
 
+
 // ======================================================================
 // MODALE OPÉRATION (créer / modifier / dupliquer)
 // ======================================================================
@@ -791,12 +1217,19 @@ const modalTitle = opModal.querySelector('h2');
 const modalSubmitBtn = document.getElementById('save-op-btn');
 
 function openCreateModal() {
+  if (document.getElementById('payee-suggestions')) document.getElementById('payee-suggestions').style.display = 'none';
+
   modalMode = 'create';
   editingTransactionId = null;
   modalTitle.innerText = "Nouvelle opération";
   modalSubmitBtn.innerText = "Enregistrer";
 
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>';
+
   opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
   document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('op-amount').value = '';
   document.getElementById('op-payee').value = '';
@@ -819,7 +1252,12 @@ function openEditModal(tx) {
   modalTitle.innerText = "Modifier l'opération";
   modalSubmitBtn.innerText = "Mettre à jour";
 
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>';
+
   opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
   document.getElementById('op-date').value = tx.date;
   document.getElementById('op-amount').value = (tx.amount_cents / 100).toFixed(2).replace('.', ',');
   document.getElementById('op-payee').value = tx.payee || '';
@@ -840,7 +1278,12 @@ function openDuplicateModal(tx) {
   modalTitle.innerText = "Nouvelle opération";
   modalSubmitBtn.innerText = "Enregistrer";
 
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>';
+
   opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
   document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
   document.getElementById('op-amount').value = (tx.amount_cents / 100).toFixed(2).replace('.', ',');
   document.getElementById('op-payee').value = tx.payee || '';
@@ -854,9 +1297,109 @@ function openDuplicateModal(tx) {
   setTimeout(() => document.getElementById('op-amount').focus(), 50);
 }
 
-function closeOpModal() { opModal.classList.remove('active'); }
+function openRecurrenceOpModal(rec, index) {
+  modalMode = 'recurrence';
+  editingRecurrenceIndex = index; // On réutilise la variable globale
+  modalTitle.innerText = "Configuration de l'opération";
+  modalSubmitBtn.innerText = "Sauvegarder";
+
+  opModal.classList.add('active');
+  const suggestions = document.getElementById('payee-suggestions');
+  if (suggestions) suggestions.style.display = 'none';
+
+  // Gestion de la date (grisée, gérée par la fréquence)
+  const dateInput = document.getElementById('op-date');
+  const dateLabel = dateInput.parentElement.querySelector('label');
+  dateInput.value = ''; // On laisse vide ou on met la date du jour pour l'exemple
+  dateInput.disabled = true;
+  dateLabel.innerHTML = 'Date <span class="label-hint">(Automatique)</span>';
+
+  // Gestion du montant
+  const amountInput = document.getElementById('op-amount');
+  const amountLabel = amountInput.parentElement.parentElement.querySelector('label');
+  amountInput.value = rec.amount_cents > 0 ? formatMoneyInput(rec.amount_cents) : '';
+  amountLabel.innerHTML = 'Montant';
+
+  // Label description (pas d'auto-complétion de règles ici)
+  document.querySelector('#group-payee label').innerHTML = 'Description';
+
+  setupMoneyInput(amountInput, { allowNegative: false, allowEmpty: false });
+
+  // Remplissage des autres champs
+  document.getElementById('op-payee').value = rec.payee || '';
+  document.getElementById('op-note').value = rec.note || '';
+  setType(rec.type || 'expense');
+
+  // Menus déroulants
+  setupDropdown('#op-account', db.accounts, rec.account_id || db.accounts[0]?.id);
+  setupDropdown('#op-to-account', db.accounts, rec.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
+  setupDropdown('#op-category', db.categories, rec.category_id || db.categories[0]?.id);
+
+  setTimeout(() => amountInput.focus(), 50);
+}
+
+
+function openRuleConfigModal(rule, index) {
+  modalMode = 'rule';
+  editingTransactionId = index; // On utilise cette variable pour stocker l'index de la règle
+  modalTitle.innerText = "Configuration de l'opération";
+  modalSubmitBtn.innerText = "Sauvegarder";
+
+  document.querySelector('#group-payee label').innerHTML = 'Description';
+
+  opModal.classList.add('active');
+  
+ // Gestion de la date
+  const dateInput = document.getElementById('op-date');
+  const dateLabel = dateInput.parentElement.querySelector('label');
+  dateInput.value = '';
+  dateInput.disabled = true;
+  dateLabel.innerHTML = 'Date <span class="label-hint">(Automatique)</span>';
+
+  // Gestion du montant
+  const amountInput = document.getElementById('op-amount');
+  const amountLabel = amountInput.parentElement.parentElement.querySelector('label');
+  amountInput.value = rule.amount_cents > 0 ? (rule.amount_cents / 100).toFixed(2).replace('.', ',') : '';
+  amountLabel.innerHTML = 'Montant <span class="label-hint">(Optionnel)</span>';
+  
+  setupMoneyInput(amountInput, { allowNegative: false, allowEmpty: true });
+
+  // Remplissage des autres champs
+  document.getElementById('op-payee').value = rule.payee || '';
+  document.getElementById('op-note').value = rule.note || '';
+  setType(rule.type || 'expense');
+
+  // Menus déroulants
+  setupDropdown('#op-account', db.accounts, rule.account_id || db.accounts[0]?.id);
+  setupDropdown('#op-to-account', db.accounts, rule.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
+  setupDropdown('#op-category', db.categories, rule.category_id || db.categories[0]?.id);
+
+  setTimeout(() => amountInput.focus(), 50);
+}
+
+function closeOpModal() {
+  opModal.classList.remove('active');
+  const suggestions = document.getElementById('payee-suggestions');
+  if (suggestions) suggestions.style.display = 'none';
+  editingRecurrenceIndex = null;
+}
+
 document.getElementById('open-new-op-btn').addEventListener('click', openCreateModal);
 document.getElementById('cancel-modal-btn').addEventListener('click', closeOpModal);
+
+// Raccourci « / » : depuis le champ Montant, bascule vers la Description
+// et ouvre l'auto-complétion des règles (modes création et modification uniquement)
+const opAmountInput = document.getElementById('op-amount');
+opAmountInput.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || (modalMode !== 'create' && modalMode !== 'edit')) return;
+  e.preventDefault();
+  opAmountInput.value = '';
+
+  const payeeField = document.getElementById('op-payee');
+  payeeField.focus();
+  payeeField.value = '/';
+  payeeField.dispatchEvent(new Event('input'));
+});
 
 document.querySelectorAll('.type-btn').forEach(btn => {
   btn.addEventListener('click', () => setType(btn.getAttribute('data-type')));
@@ -909,8 +1452,12 @@ function setupDropdown(selector, items, defaultId) {
 opForm.addEventListener('submit', async (e) => {
   e.preventDefault();
 
-  const amountCents = parseMoneyInput(document.getElementById('op-amount').value);
-  if (!amountCents || amountCents <= 0) {
+  const amountCents = parseMoneyInput(document.getElementById('op-amount').value) || 0;
+  const isRule = modalMode === 'rule';
+  const isRecurrence = modalMode === 'recurrence';
+
+  // Si c'est une opération classique OU une récurrence, le montant ne peut pas être 0 ou vide
+  if ((!isRule && !isRecurrence && amountCents <= 0) || (isRecurrence && amountCents <= 0)) {
     const amountInput = document.getElementById('op-amount');
     amountInput.focus();
     flashInputError(amountInput);
@@ -918,23 +1465,46 @@ opForm.addEventListener('submit', async (e) => {
   }
 
   const txData = {
-    date: document.getElementById('op-date').value,
+    date: (isRule || isRecurrence) ? '' : document.getElementById('op-date').value,
     type: currentOpType,
     payee: document.getElementById('op-payee').value,
     note: document.getElementById('op-note').value,
     account_id: document.querySelector('#op-account').getAttribute('data-value'),
     to_account_id: currentOpType === 'transfer' ? document.querySelector('#op-to-account').getAttribute('data-value') : null,
     category_id: currentOpType === 'transfer' ? null : document.querySelector('#op-category').getAttribute('data-value'),
-    amount_cents: amountCents // Centimes entiers stricts
+    amount_cents: amountCents
   };
 
   // Un virement doit se faire vers un compte différent du compte source
- if (currentOpType === 'transfer' && txData.account_id === txData.to_account_id) {
-    flashInputError(document.querySelector('#op-account .select-trigger'));    // Compte source
-    flashInputError(document.querySelector('#op-to-account .select-trigger')); // Compte destinataire
+  if (currentOpType === 'transfer' && txData.account_id === txData.to_account_id) {
+    flashInputError(document.querySelector('#op-account .select-trigger'));
+    flashInputError(document.querySelector('#op-to-account .select-trigger'));
     return;
   }
 
+  // --- SAUVEGARDE RÈGLE ---
+  if (isRule) {
+    tempRules[editingTransactionId] = {
+      ...tempRules[editingTransactionId],
+      ...txData
+    };
+    renderSettingsRules();
+    closeOpModal();
+    return;
+  }
+
+  // --- SAUVEGARDE RÉCURRENCE ---
+  if (isRecurrence) {
+    tempRecurrences[editingRecurrenceIndex] = {
+      ...tempRecurrences[editingRecurrenceIndex],
+      ...txData
+    };
+    renderSettingsRecurrences();
+    closeOpModal();
+    return;
+  }
+
+  // --- SAUVEGARDE OPÉRATION CLASSIQUE ---
   if (modalMode === 'edit') {
     txData.id = editingTransactionId;
     const updated = await window.tabula.updateTransaction(txData);
@@ -949,6 +1519,7 @@ opForm.addEventListener('submit', async (e) => {
   renderTransactions();
   closeOpModal();
 });
+
 
 // ======================================================================
 // SUPPRESSION D'UNE OPÉRATION
@@ -974,6 +1545,7 @@ document.getElementById('confirm-delete-btn').addEventListener('click', async ()
   }
 });
 
+
 // ======================================================================
 // PARAMÈTRES
 // ======================================================================
@@ -981,7 +1553,9 @@ document.getElementById('confirm-delete-btn').addEventListener('click', async ()
 const settingsModal = document.getElementById('settings-modal');
 const accountsListEl = document.getElementById('settings-accounts-list');
 const categoriesListEl = document.getElementById('settings-categories-list');
-let tempAccounts = [], tempCategories = [];
+const rulesListEl = document.getElementById('settings-rules-list');
+const recurrencesListEl = document.getElementById('settings-recurrences-list');
+let tempAccounts = [], tempCategories = [], tempRules = [], tempRecurrences = [];
 
 let pendingSettingsDeleteType = null;
 let pendingSettingsDeleteIndex = null;
@@ -992,9 +1566,17 @@ function openSettingsDeleteModal(type, index, item) {
   
   const descEl = document.getElementById('settings-delete-desc');
   const countEl = document.getElementById('settings-delete-count');
+
+  if (type === 'rule' || type === 'recurrence') {
+    descEl.innerText = "La suppression de cet élément prendra effet lors de l'enregistrement des paramètres.";
+    countEl.style.display = 'none';
+    document.getElementById('settings-delete-modal').classList.add('active');
+    return;
+  }
+
+  countEl.style.display = 'block';
   const label = type === 'account' ? 'ce compte' : 'cette catégorie';
 
-  // Calcul du nombre d'opérations dépendantes
   let linkedCount = 0;
   if (type === 'account') {
     linkedCount = db.transactions.filter(t => t.account_id === item.id || t.to_account_id === item.id).length;
@@ -1011,6 +1593,8 @@ function openSettingsDeleteModal(type, index, item) {
 function openSettingsModal() {
   tempAccounts = JSON.parse(JSON.stringify(db.accounts));
   tempCategories = JSON.parse(JSON.stringify(db.categories));
+  tempRules = JSON.parse(JSON.stringify(db.rules || [])); 
+  tempRecurrences = JSON.parse(JSON.stringify(db.recurrences || []));
   tempTheme = savedTheme;
   tempDataPath = savedDataPath;
 
@@ -1019,6 +1603,8 @@ function openSettingsModal() {
 
   renderSettingsAccounts();
   renderSettingsCategories();
+  renderSettingsRecurrences();
+  renderSettingsRules();
   resetUpdateView();
 
   const themeSelect = document.getElementById('settings-theme-select');
@@ -1108,11 +1694,12 @@ function renderSettingsAccounts() {
   tempAccounts.forEach((acc, idx) => {
     const row = document.createElement('div');
     row.className = 'settings-row';
+    row.setAttribute('data-id', acc.id);
     const initialEuros = formatMoneyInput(acc.initial_balance_cents);
 
     row.innerHTML = `
       <div class="settings-name-segment">
-        <input type="text" class="settings-input acc-name-input" value="${acc.name}" placeholder="Nom du compte">
+        <input type="text" class="settings-input acc-name-input" value="${escapeHtml(acc.name)}" placeholder="Nom du compte">
         <span class="char-counter">0/8</span>
       </div>
 
@@ -1123,7 +1710,10 @@ function renderSettingsAccounts() {
         <span class="currency-symbol">€</span>
       </div>
 
-      <button type="button" class="settings-row-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
     `;
 
     const nameSegment = row.querySelector('.settings-name-segment');
@@ -1136,12 +1726,14 @@ function renderSettingsAccounts() {
       onCommit: (cents) => { acc.initial_balance_cents = cents; }
     });
 
-    row.querySelector('.settings-row-btn').addEventListener('click', () => {
+    row.querySelector('.delete-btn').addEventListener('click', () => {
       openSettingsDeleteModal('account', idx, acc);
     });
 
     accountsListEl.appendChild(row);
   });
+  
+  setupDragAndDrop(accountsListEl, tempAccounts, renderSettingsAccounts);
 }
 
 // Rendu des catégories
@@ -1150,26 +1742,585 @@ function renderSettingsCategories() {
   tempCategories.forEach((cat, idx) => {
     const row = document.createElement('div');
     row.className = 'settings-row';
+    row.setAttribute('data-id', cat.id);
 
     row.innerHTML = `
       <div class="settings-name-segment">
-        <input type="text" class="settings-input cat-name-input" value="${cat.name}" placeholder="Nom de la catégorie">
+        <input type="text" class="settings-input cat-name-input" value="${escapeHtml(cat.name)}" placeholder="Nom de la catégorie">
         <span class="char-counter">0/24</span>
       </div>
-      <button type="button" class="settings-row-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
     `;
 
     const nameSegment = row.querySelector('.settings-name-segment');
     const nameInput = row.querySelector('.cat-name-input');
     setupCharCounter(nameSegment, nameInput, 24, (val) => { cat.name = val; });
 
-    row.querySelector('.settings-row-btn').addEventListener('click', () => {
+    row.querySelector('.delete-btn').addEventListener('click', () => {
       openSettingsDeleteModal('category', idx, cat);
     });
 
     categoriesListEl.appendChild(row);
   });
+
+  setupDragAndDrop(categoriesListEl, tempCategories, renderSettingsCategories);
 }
+
+// Rendu des récurrences
+function renderSettingsRecurrences() {
+  recurrencesListEl.innerHTML = '';
+  tempRecurrences.forEach((rec, idx) => {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.setAttribute('data-id', rec.id);
+
+    row.innerHTML = `
+      <div class="settings-name-segment">
+        <input type="text" class="settings-input rec-name-input" value="${escapeHtml(rec.name || '')}" placeholder="Nom de la récurrence">
+      </div>
+
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn rec-calendar-btn" title="Configurer la fréquence"><svg class="icon"><use href="icons.svg#icon-calendar"></use></svg></button>
+        <button type="button" class="settings-row-btn rec-edit-op-btn" title="Modifier l'opération"><svg class="icon"><use href="icons.svg#icon-edit"></use></svg></button>
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
+    `;
+
+    // Saisie directe du nom
+    const nameInput = row.querySelector('.rec-name-input');
+    nameInput.addEventListener('input', () => {
+      rec.name = nameInput.value;
+    });
+
+    // Bouton Calendrier
+    row.querySelector('.rec-calendar-btn').addEventListener('click', () => {
+      openFreqModal(rec, idx);
+    });
+
+    // Bouton Modifier l'opération (Crayon)
+    row.querySelector('.rec-edit-op-btn').addEventListener('click', () => {
+      openRecurrenceOpModal(rec, idx);
+    });
+
+    // Bouton Supprimer
+    row.querySelector('.delete-btn').addEventListener('click', () => {
+      openSettingsDeleteModal('recurrence', idx, rec);
+    });
+
+    recurrencesListEl.appendChild(row);
+  });
+
+  setupDragAndDrop(recurrencesListEl, tempRecurrences, renderSettingsRecurrences);
+}
+
+
+// ======================================================================
+// MODALE DE FRÉQUENCE
+// ======================================================================
+
+const freqModal = document.getElementById('freq-modal');
+const freqTypeSelect = document.getElementById('freq-type-select');
+const freqDayOfWeekSelect = document.getElementById('freq-day-of-week');
+
+// Fonction utilitaire pour remplir un custom-select
+function populateSelect(selectId, min, max, defaultValue) {
+  const selectEl = document.getElementById(selectId);
+  const menuEl = selectEl.querySelector('.select-menu');
+  const labelEl = selectEl.querySelector('.select-label');
+  
+  menuEl.innerHTML = '';
+  for (let i = min; i <= max; i++) {
+    const isSelected = i === defaultValue;
+    if (isSelected) labelEl.innerText = i;
+    menuEl.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${i}">${i}</div>`;
+  }
+}
+
+const MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+function populateMonthSelect(selectId, defaultValue) {
+  const selectEl = document.getElementById(selectId);
+  const menuEl = selectEl.querySelector('.select-menu');
+  const labelEl = selectEl.querySelector('.select-label');
+  
+  menuEl.innerHTML = '';
+  MONTHS_FR.forEach((month, idx) => {
+    const isSelected = idx === defaultValue;
+    if (isSelected) labelEl.innerText = month;
+    menuEl.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${idx}">${month}</div>`;
+  });
+}
+
+function openFreqModal(rec, index) {
+  editingRecurrenceIndex = index;
+  
+  const freq = rec.frequency || { type: 'monthly', day: 1 };
+
+  // Remplissage des listes déroulantes
+  populateSelect('freq-day-of-month', 1, 31, freq.day || 1);
+  populateSelect('freq-day-of-year', 1, 31, freq.day || 1);
+  populateMonthSelect('freq-month-of-year', freq.month || 0);
+
+  // Réinitialisation des menus déroulants
+  initCustomSelects();
+
+  // Sélection des valeurs courantes
+  const typeOption = freqTypeSelect.querySelector(`.select-option[data-value="${freq.type}"]`);
+  if (typeOption) selectOption(freqTypeSelect, typeOption);
+
+  if (freq.type === 'yearly') {
+    const dayOpt = document.getElementById('freq-day-of-year').querySelector(`.select-option[data-value="${freq.day || 1}"]`);
+    if (dayOpt) selectOption(document.getElementById('freq-day-of-year'), dayOpt);
+    const monthOpt = document.getElementById('freq-month-of-year').querySelector(`.select-option[data-value="${freq.month || 0}"]`);
+    if (monthOpt) selectOption(document.getElementById('freq-month-of-year'), monthOpt);
+  } else if (freq.type === 'weekly') {
+    const dayOption = freqDayOfWeekSelect.querySelector(`.select-option[data-value="${freq.day !== undefined ? freq.day : 1}"]`);
+    if (dayOption) selectOption(freqDayOfWeekSelect, dayOption);
+  } else if (freq.type === 'monthly') {
+    const dayOpt = document.getElementById('freq-day-of-month').querySelector(`.select-option[data-value="${freq.day || 1}"]`);
+    if (dayOpt) selectOption(document.getElementById('freq-day-of-month'), dayOpt);
+  }
+
+  updateFreqFields(freq.type);
+  freqModal.classList.add('active');
+}
+
+function updateFreqFields(type) {
+  document.getElementById('freq-monthly-fields').style.display = type === 'monthly' ? 'flex' : 'none';
+  document.getElementById('freq-yearly-fields').style.display = type === 'yearly' ? 'flex' : 'none';
+  document.getElementById('freq-weekly-fields').style.display = type === 'weekly' ? 'flex' : 'none';
+}
+
+freqTypeSelect.addEventListener('change', (e) => {
+  updateFreqFields(e.detail.value);
+});
+
+document.getElementById('cancel-freq-btn').addEventListener('click', () => {
+  freqModal.classList.remove('active');
+});
+
+document.getElementById('save-freq-btn').addEventListener('click', () => {
+  if (editingRecurrenceIndex === null) return;
+
+  const type = freqTypeSelect.getAttribute('data-value');
+  let frequency = { type };
+
+  if (type === 'monthly') {
+    const day = parseInt(document.getElementById('freq-day-of-month').getAttribute('data-value')) || 1;
+    frequency.day = day;
+  } else if (type === 'yearly') {
+    const day = parseInt(document.getElementById('freq-day-of-year').getAttribute('data-value')) || 1;
+    const month = parseInt(document.getElementById('freq-month-of-year').getAttribute('data-value')) || 0;
+    frequency.day = day;
+    frequency.month = month;
+  } else if (type === 'weekly') {
+    const day = parseInt(freqDayOfWeekSelect.getAttribute('data-value'));
+    frequency.day = day;
+  }
+
+  tempRecurrences[editingRecurrenceIndex].frequency = frequency;
+  renderSettingsRecurrences();
+  freqModal.classList.remove('active');
+});
+
+// Rendu des règles
+function renderSettingsRules() {
+  rulesListEl.innerHTML = '';
+  tempRules.forEach((rule, idx) => {
+    const row = document.createElement('div');
+    row.className = 'settings-row';
+    row.setAttribute('data-id', rule.id);
+
+    row.innerHTML = `
+      <div class="settings-name-segment">
+        <input type="text" class="settings-input rule-name-input" value="${escapeHtml(rule.name || '')}" placeholder="Nom de la règle">
+        <span class="char-counter">0/12</span>
+      </div>
+
+      <div class="settings-divider"></div>
+
+      <div class="settings-keyword-segment">
+        <input type="text" class="settings-input rule-keyword-input" value="${escapeHtml(rule.keyword ? '/' + rule.keyword : '')}" placeholder="/clé">
+        <span class="char-counter">0/8</span>
+      </div>
+
+      <div class="settings-row-actions">
+        <button type="button" class="settings-row-btn rule-edit-btn" title="Configurer la règle"><svg class="icon"><use href="icons.svg#icon-edit"></use></svg></button>
+        <button type="button" class="settings-row-btn drag-handle" title="Déplacer"><svg class="icon"><use href="icons.svg#icon-drag"></use></svg></button>
+        <button type="button" class="settings-row-btn delete-btn" title="Supprimer"><svg class="icon"><use href="icons.svg#icon-trash"></use></svg></button>
+      </div>
+    `;
+
+    const nameSegment = row.querySelector('.settings-name-segment');
+    const nameInput = row.querySelector('.rule-name-input');
+    setupCharCounter(nameSegment, nameInput, 12, (val) => { rule.name = val; });
+
+    // --- LOGIQUE DU RACCOURCI (avec slash forcé) ---
+    const keywordSegment = row.querySelector('.settings-keyword-segment');
+    const keywordInput = row.querySelector('.rule-keyword-input');
+    const keywordCounter = keywordSegment.querySelector('.char-counter');
+
+    function updateKwDisplay() {
+      const val = keywordInput.value;
+      const len = val.startsWith('/') ? val.length - 1 : val.length;
+      keywordCounter.innerText = `${len}/8`;
+      keywordCounter.classList.toggle('overflow', len > 8);
+    }
+    updateKwDisplay();
+
+    keywordInput.addEventListener('focus', () => {
+      if (!keywordInput.value.startsWith('/')) {
+        keywordInput.value = '/' + keywordInput.value;
+      }
+      updateKwDisplay();
+      keywordInput.setSelectionRange(keywordInput.value.length, keywordInput.value.length);
+    });
+
+    keywordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && keywordInput.value === '/') {
+        e.preventDefault();
+      }
+    });
+
+    keywordInput.addEventListener('input', () => {
+      let val = keywordInput.value;
+      if (!val.startsWith('/')) {
+        val = '/' + val;
+      }
+      val = '/' + val.substring(1).replace(/\//g, '').replace(/\s/g, '').toLowerCase();
+      if (val.length > 9) {
+        val = val.substring(0, 9);
+      }
+      keywordInput.value = val;
+      rule.keyword = val.substring(1);
+      updateKwDisplay();
+    });
+
+    keywordInput.addEventListener('blur', () => {
+      if (keywordInput.value === '/') {
+        keywordInput.value = '';
+        rule.keyword = '';
+      }
+      updateKwDisplay();
+    });
+
+    // --- LES BOUTONS D'ACTION ---
+    row.querySelector('.rule-edit-btn').addEventListener('click', () => {
+      openRuleConfigModal(rule, idx);
+    });
+
+    row.querySelector('.delete-btn').addEventListener('click', () => {
+      openSettingsDeleteModal('rule', idx, rule);
+    });
+
+    rulesListEl.appendChild(row);
+  });
+
+  setupDragAndDrop(rulesListEl, tempRules, renderSettingsRules);
+}
+
+// Validation des règles
+function validateRulesList() {
+  let isValid = true;
+  const keywordCounts = {};
+
+  tempRules.forEach(rule => {
+    const cleanKw = rule.keyword ? rule.keyword.trim().toLowerCase() : '';
+    if (cleanKw) keywordCounts[cleanKw] = (keywordCounts[cleanKw] || 0) + 1;
+  });
+
+  const rows = rulesListEl.querySelectorAll('.settings-row');
+  tempRules.forEach((rule, idx) => {
+    const cleanKw = rule.keyword ? rule.keyword.trim().toLowerCase() : '';
+    const row = rows[idx];
+    
+    // Erreur si le mot clé est vide ou s'il y a un doublon
+    if (cleanKw === '' || keywordCounts[cleanKw] > 1) {
+      isValid = false;
+      flashInputError(row);
+      if (cleanKw === '') {
+        row.querySelector('.rule-keyword-input').focus();
+      }
+    }
+  });
+
+  return isValid;
+}
+
+
+// ======================================================================
+// DRAG & DROP GÉNÉRIQUE (Scroll + animation Échap par clone)
+// ======================================================================
+
+function setupDragAndDrop(containerEl, dataArray, renderCallback) {
+  const rows = containerEl.querySelectorAll('.settings-row');
+  const scrollContainer = containerEl.closest('.settings-content') || containerEl.parentElement;
+  
+  rows.forEach(row => {
+    const handle = row.querySelector('.drag-handle');
+    if (!handle) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+    let placeholder = null;
+    let rowRect = null;
+    let currentIndex = -1;
+    let placeholderIndex = -1;
+    let originalData = [];
+
+    handle.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      
+      isDragging = true;
+      rowRect = row.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      
+      currentIndex = Array.from(containerEl.children).indexOf(row);
+      originalData = [...dataArray]; 
+      
+      document.body.classList.add('is-dragging-active');
+
+      placeholder = document.createElement('div');
+      placeholder.className = 'settings-row-placeholder';
+      containerEl.insertBefore(placeholder, row);
+      
+      row.classList.add('dragging');
+      row.style.width = `${rowRect.width}px`;
+      row.style.left = `${rowRect.left}px`;
+      row.style.top = `${rowRect.top}px`;
+      
+      placeholderIndex = currentIndex;
+      
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('keydown', onKeyDown, true);
+      if (scrollContainer) {
+        scrollContainer.addEventListener('scroll', onScroll);
+      }
+    });
+
+    function onScroll() {
+      if (!isDragging) return;
+      onMouseMove({ clientX: lastMouseX, clientY: lastMouseY });
+    }
+
+    function onMouseMove(e) {
+      if (!isDragging) return;
+
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      row.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+      const allElements = Array.from(containerEl.children).filter(el => 
+        el !== row && el.classList.contains('settings-row')
+      );
+
+      let newIndex = allElements.length;
+      for (let i = 0; i < allElements.length; i++) {
+        const elRect = allElements[i].getBoundingClientRect();
+        
+        if (e.clientY < elRect.top + (elRect.height / 2)) {
+          newIndex = i;
+          break;
+        }
+      }
+
+      if (newIndex !== placeholderIndex) {
+        const rowsToAnimate = Array.from(containerEl.querySelectorAll('.settings-row:not(.dragging)'));
+        const firstRects = rowsToAnimate.map(r => r.getBoundingClientRect());
+
+        const targetEl = allElements[newIndex];
+        if (targetEl) {
+          containerEl.insertBefore(placeholder, targetEl);
+        } else {
+          containerEl.appendChild(placeholder);
+        }
+        
+        placeholderIndex = newIndex;
+
+        rowsToAnimate.forEach((r, i) => {
+          const lastRect = r.getBoundingClientRect();
+          const delta = firstRects[i].top - lastRect.top;
+          
+          if (delta !== 0) {
+            r.classList.remove('is-animating');
+            r.style.transform = `translateY(${delta}px)`;
+            void r.offsetHeight; 
+            r.classList.add('is-animating');
+            r.style.transform = '';
+            setTimeout(() => {
+              r.classList.remove('is-animating');
+              r.style.transform = '';
+            }, 200);
+          }
+        });
+      }
+    }
+
+    function onMouseUp() {
+      if (!isDragging) return;
+      finishDrag(false);
+    }
+
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        finishDrag(true);
+      }
+    }
+
+    function finishDrag(cancel) {
+      isDragging = false;
+      
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener('keydown', onKeyDown, true);
+      if (scrollContainer) {
+        scrollContainer.removeEventListener('scroll', onScroll);
+      }
+      document.body.classList.remove('is-dragging-active');
+
+      if (cancel) {
+        // --- ANNULATION (ÉCHAP) : APPROCHE PAR CLONE ---
+        
+        // 1. Calculer la position visuelle actuelle de la carte
+        const deltaX = lastMouseX - startX;
+        const deltaY = lastMouseY - startY;
+        const currentTop = rowRect.top + deltaY;
+        const currentLeft = rowRect.left + deltaX;
+        const rowId = row.getAttribute('data-id');
+
+        // 2. Mémoriser les positions actuelles des AUTRES cartes
+        const currentRects = new Map();
+        containerEl.querySelectorAll('.settings-row').forEach(el => {
+          if (el !== row) {
+            currentRects.set(el.getAttribute('data-id'), el.getBoundingClientRect());
+          }
+        });
+
+        // 3. Détacher la carte en main et le placeholder du container
+        placeholder.remove();
+        row.remove(); // Retire row du container
+
+        // 4. Restaurer les données et redessiner (ordre original)
+        dataArray.length = 0;
+        dataArray.push(...originalData);
+        renderCallback();
+
+        // 5. Récupérer la nouvelle carte (recréée par renderCallback)
+        const newRow = containerEl.querySelector(`.settings-row[data-id="${rowId}"]`);
+
+        // 6. Prépositionner les autres cartes pour le FLIP (avant de révéler row)
+        const elementsToAnimate = [];
+        containerEl.querySelectorAll('.settings-row').forEach(el => {
+          if (el === newRow) {
+            el.style.visibility = 'hidden';
+            return;
+          }
+          const id = el.getAttribute('data-id');
+          const oldRect = currentRects.get(id);
+          if (oldRect) {
+            const newRect = el.getBoundingClientRect();
+            const delta = oldRect.top - newRect.top;
+            if (delta !== 0) {
+              el.style.transform = `translateY(${delta}px)`;
+              elementsToAnimate.push(el);
+            }
+          }
+        });
+
+        // 7. Préparer le clone pour l'animation : on le sort du container
+        //    et on l'attache au body pour qu'il survive à renderCallback
+        document.body.appendChild(row);
+        row.style.transition = 'none';
+        row.style.top = `${currentTop}px`;
+        row.style.left = `${currentLeft}px`;
+        row.style.transform = 'none';
+
+        // 8. Forcer un reflow global
+        void row.offsetHeight;
+        void containerEl.offsetHeight;
+
+        // 9. Lancer les animations
+        row.classList.add('is-animating');
+        if (newRow) {
+          const targetRect = newRow.getBoundingClientRect();
+          row.style.top = `${targetRect.top}px`;
+          row.style.left = `${targetRect.left}px`;
+        }
+
+        elementsToAnimate.forEach(el => {
+          el.classList.add('is-animating');
+          el.style.transform = '';
+        });
+
+        // 10. Nettoyage final
+        setTimeout(() => {
+          row.remove();
+          if (newRow) newRow.style.visibility = '';
+          elementsToAnimate.forEach(el => {
+            el.classList.remove('is-animating');
+            el.style.transform = '';
+          });
+        }, 200);
+
+      } else {
+        // --- LÂCHER (DROP) ---
+        const placeholderRect = placeholder.getBoundingClientRect();
+        
+        const currentTop = rowRect.top + (lastMouseY - startY);
+        const currentLeft = rowRect.left + (lastMouseX - startX);
+        
+        row.style.transition = 'none';
+        row.style.top = `${currentTop}px`;
+        row.style.left = `${currentLeft}px`;
+        row.style.transform = 'none';
+        
+        void row.offsetHeight;
+        
+        row.classList.add('is-animating');
+        row.style.top = `${placeholderRect.top}px`;
+        row.style.left = `${placeholderRect.left}px`;
+
+        setTimeout(() => {
+          const siblingsWithoutDrag = Array.from(containerEl.children).filter(el => el !== row);
+          const targetIndex = siblingsWithoutDrag.indexOf(placeholder);
+          
+          if (currentIndex !== targetIndex) {
+            const [movedItem] = dataArray.splice(currentIndex, 1);
+            dataArray.splice(targetIndex, 0, movedItem);
+          }
+
+          row.classList.remove('dragging');
+          row.classList.remove('is-animating');
+          row.style.transition = '';
+          row.style.transform = '';
+          row.style.width = '';
+          row.style.left = '';
+          row.style.top = '';
+          
+          renderCallback(); 
+        }, 200);
+      }
+    }
+  });
+}
+
 
 // Ajout de compte
 document.getElementById('settings-add-account-btn').addEventListener('click', () => {
@@ -1190,8 +2341,45 @@ document.getElementById('settings-add-category-btn').addEventListener('click', (
   if (lastRow) setTimeout(() => lastRow.focus(), 20);
 });
 
+document.getElementById('settings-add-recurrence-btn').addEventListener('click', () => {
+  tempRecurrences.push({ 
+    id: 'rec_' + crypto.randomUUID(), 
+    name: '', 
+    frequency: { type: 'monthly', day: 1 }, // Valeur par défaut pour que ça s'affiche
+    type: 'expense',
+    amount_cents: 0,
+    account_id: '',
+    category_id: '',
+    payee: '',
+    note: ''
+  });
+  renderSettingsRecurrences();
+  
+  const lastRow = recurrencesListEl.querySelector('.settings-row:last-child .rec-name-input');
+  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+});
+
+// Ajout de règle
+document.getElementById('settings-add-rule-btn').addEventListener('click', () => {
+  tempRules.push({ 
+    id: 'rule_' + crypto.randomUUID(), 
+    name: '', 
+    keyword: '', 
+    type: 'expense', 
+    amount_cents: 0, 
+    account_id: '', 
+    category_id: '', 
+    note: '', 
+    payee: '' 
+  });
+  renderSettingsRules();
+  
+  const lastRow = rulesListEl.querySelector('.settings-row:last-child .rule-name-input');
+  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+});
+
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
-  if (!validateAccountsList() || !validateCategoriesList()) return;
+  if (!validateAccountsList() || !validateCategoriesList() || !validateRulesList()) return;
 
   const finalAccounts = tempAccounts.map(a => ({ ...a, name: a.name.trim() }));
   const finalCategories = tempCategories.map(c => ({ ...c, name: c.name.trim() }));
@@ -1203,6 +2391,8 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 
   await window.tabula.updateAccounts(finalAccounts);
   await window.tabula.updateCategories(finalCategories);
+  await window.tabula.updateRules(tempRules);
+  await window.tabula.updateRecurrences(tempRecurrences);
 
   savedTheme = tempTheme;
   localStorage.setItem('tabula-theme', savedTheme);
@@ -1218,6 +2408,7 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
     
     if (currentActivePane?.id === 'tab-accounts' && !validateAccountsList()) return;
     if (currentActivePane?.id === 'tab-categories' && !validateCategoriesList()) return;
+    if (currentActivePane?.id === 'tab-rules' && !validateRulesList()) return;
 
     const externalUrl = tab.getAttribute('data-url');
     if (externalUrl) {
@@ -1296,11 +2487,14 @@ document.getElementById('confirm-settings-delete-btn').addEventListener('click',
   } else if (pendingSettingsDeleteType === 'category') {
     tempCategories.splice(pendingSettingsDeleteIndex, 1);
     renderSettingsCategories();
+  } else if (pendingSettingsDeleteType === 'rule') {
+    tempRules.splice(pendingSettingsDeleteIndex, 1);
+    renderSettingsRules();
+  } else if (pendingSettingsDeleteType === 'recurrence') {
+    tempRecurrences.splice(pendingSettingsDeleteIndex, 1);
+    renderSettingsRecurrences();
   }
 });
-
-let savedDataPath = '';
-let tempDataPath = '';
 
 // Affichage du chemin actif
 async function refreshDataPathDisplay() {
@@ -1383,7 +2577,6 @@ document.getElementById('close-incompatible-btn')?.addEventListener('click', () 
 });
 
 
-
 // Onglet mises à jour
 
 const updateStage = document.getElementById('update-stage');
@@ -1434,7 +2627,7 @@ async function runUpdateCheck() {
       <div class="settings-cards-group">
         <div class="settings-card">
           <div class="settings-card-info" style="text-align: left;">
-            <span class="settings-card-title">Tabula v${res.latestVersion}</span>
+            <span class="settings-card-title">Tabula v${escapeHtml(res.latestVersion)}</span>
             <span class="text-muted settings-card-desc">${dateText}</span>
           </div>
           <button type="button" class="btn" id="btn-get-update">Obtenir</button>
@@ -1455,9 +2648,6 @@ async function runUpdateCheck() {
 }
 
 
-
-
-
 // ======================================================================
 // WIP
 // ======================================================================
@@ -1467,22 +2657,27 @@ document.getElementById('nav-analytics-btn').addEventListener('click', () => wip
 document.getElementById('nav-export-btn').addEventListener('click', () => wipModal.classList.add('active'));
 document.getElementById('close-wip-btn').addEventListener('click', () => wipModal.classList.remove('active'));
 
+
 // ======================================================================
-// FERMETURE DES MODALES CLIC EXT.
+// FERMETURE DES MODALES (CLIC EXTÉRIEUR)
 // ======================================================================
 
 document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
   backdrop.addEventListener('click', (e) => {
     if (e.target !== backdrop) return;
+    
     if (backdrop.id === 'operation-modal') closeOpModal();
-    else if (backdrop.id === 'settings-modal') closeSettingsModal();
+    else if (backdrop.id === 'settings-modal') {
+      // Cette modale ne se ferme pas au clic extérieur
+    }
     else if (backdrop.id === 'delete-modal') { backdrop.classList.remove('active'); deletingTransactionId = null; }
     else backdrop.classList.remove('active');
   });
 });
 
+
 // ======================================================================
-// RACCOURCIS GLOB.
+// RACCOURCIS GLOBAUX
 // ======================================================================
 
 document.addEventListener('keydown', (e) => {
@@ -1553,6 +2748,7 @@ document.addEventListener('keydown', (e) => {
       { id: 'wip-modal', closeFn: () => document.getElementById('wip-modal').classList.remove('active') },
       { id: 'new-db-modal', closeFn: () => document.getElementById('new-db-modal').classList.remove('active') },
       { id: 'operation-modal', closeFn: closeOpModal },
+      { id: 'freq-modal', closeFn: () => freqModal.classList.remove('active') },
       { id: 'settings-modal', closeFn: closeSettingsModal }
     ];
 
@@ -1581,8 +2777,9 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+
 // ======================================================================
-// BLOCAGE DU SCROLL AP
+// BLOCAGE DU SCROLL (MODALES OUVERTES)
 // ======================================================================
 
 window.addEventListener('wheel', (e) => {
@@ -1597,12 +2794,16 @@ window.addEventListener('wheel', (e) => {
   e.preventDefault();
 }, { passive: false });
 
+
 // ======================================================================
 // INIT.
 // ======================================================================
 
 async function loadApp() {
   db = await window.tabula.getData();
+
+  await checkRecurrences();
+  if (!db.rules) db.rules = [];
 
   applyVisualTheme(savedTheme);
 
@@ -1641,6 +2842,7 @@ async function loadApp() {
   initCustomSelects();
   renderBalanceCarousel();
   renderTransactions();
+  renderPendingRecurrences();
 }
 
 
