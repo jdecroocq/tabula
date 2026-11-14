@@ -9,36 +9,37 @@
 <body>
   <div class="app-viewport">
 
-    <header class="app-header">
-      <div class="header-brand">
-        <h1 class="brand-title font-serif">
-          Tabula
-          <span class="app-version text-muted" id="app-version"></span>
-        </h1>
-      </div>
+  <header class="app-header">
+    <div class="header-brand">
+      <h1 class="brand-title font-serif">
+        Tabula
+        <span class="app-version text-muted" id="app-version"></span>
+      </h1>
+    </div>
 
-      <div class="header-actions">
-        <button class="btn" id="nav-analytics-btn" title="Analyse financière">
-          <svg class="icon"><use href="icons.svg#icon-analytics"></use></svg>
-          <span>Analyse</span>
-        </button>
+    <div class="header-actions">
+      <button class="btn" id="nav-analytics-btn" title="Analyse financière">
+        <svg class="icon"><use href="icons.svg#icon-analytics"></use></svg>
+        <span>Analyse</span>
+      </button>
 
-        <button class="btn" id="nav-export-btn" title="Exporter des rapports">
-          <svg class="icon"><use href="icons.svg#icon-contract"></use></svg>
-          <span>Rapports</span>
-        </button>
+      <button class="btn" id="nav-export-btn" title="Exporter des rapports">
+        <svg class="icon"><use href="icons.svg#icon-contract"></use></svg>
+        <span>Rapports</span>
+      </button>
 
-        <button class="btn" id="nav-settings-btn" title="Paramètres">
-          <svg class="icon"><use href="icons.svg#icon-settings"></use></svg>
-          <span>Paramètres</span>
-        </button>
+      <button class="btn" id="nav-settings-btn" title="Paramètres">
+        <svg class="icon"><use href="icons.svg#icon-settings"></use></svg>
+        <span>Paramètres</span>
+      </button>
 
-        <button class="btn btn-primary" id="open-new-op-btn">
-          <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
-          <span>Nouvelle opération</span>
-        </button>
-      </div>
-    </header>
+      <button class="btn btn-primary" id="open-new-op-btn">
+        <svg class="icon"><use href="icons.svg#icon-add"></use></svg>
+        <span>Nouvelle opération</span>
+      </button>
+    </div>
+  </header>
+
 
     <main class="main-layout">
 
@@ -55,6 +56,7 @@
       <!-- Panel récurrences -->
       <div class="recurrences-card" id="recurrences-panel" style="display: none;">
         <div class="recurrences-summary">
+          <!-- Utilisation de la classe standard -->
           <svg class="icon icon-illu"><use href="icons.svg#icon-illu-recurrence"></use></svg>
           
           <div class="summary-text">
@@ -64,7 +66,6 @@
         </div>
         <div class="recurrences-actions-area">
           <div class="recurrences-list" id="recurrences-list">
-            <!-- Les lignes seront injectées ici par le JS -->
           </div>
           <div class="recurrences-footer">
             <button type="button" class="btn" id="btn-ignore-all">Tout ignorer</button>
@@ -283,6 +284,7 @@
             </div>
           </div>
 
+
           <!-- Onglet mise à jour -->
           <div class="settings-pane" id="tab-update">
             <div class="pane-header">
@@ -296,6 +298,7 @@
 
             <div id="update-stage" class="update-center-stage"></div>
           </div>
+
 
         </div>
       </div>
@@ -353,7 +356,6 @@
           <!-- Menu d'auto-complétion pour les règles -->
           <div class="custom-select open" id="payee-suggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; z-index: 10;">
             <div class="select-menu" style="display: flex; max-height: 200px;">
-              <!-- Les options seront injectées ici par le JS -->
             </div>
           </div>
         </div>

@@ -1,5 +1,7 @@
 document.addEventListener('contextmenu', e => e.preventDefault());
 
+// État global
+
 let globalAppVersion = '';
 
 let db = {
@@ -11,110 +13,25 @@ let db = {
   pending_recurrences: [],
   last_opened: null
 };
+
 let searchQuery = '';
+
 let currentOpType = 'expense';
 
 let visibleCount = 50;
 
 let modalMode = 'create';
+
 let editingTransactionId = null;
+
 let deletingTransactionId = null;
+
 let contextMenuTxId = null;
 
 let editingRecurrenceIndex = null;
-let savedDataPath = '';
-let tempDataPath = '';
 
-function getOccurrencesBetween(startDateStr, endDateStr, frequency) {
-  const occurrences = [];
-  const start = new Date(startDateStr + 'T12:00:00');
-  const end = new Date(endDateStr + 'T12:00:00');
 
-  if (isNaN(start) || isNaN(end) || start >= end) return occurrences;
-
-  let current = new Date(start);
-  current.setDate(current.getDate() + 1);
-
-  while (current <= end) {
-    let isMatch = false;
-
-    if (frequency.type === 'weekly') {
-      if (current.getDay() === frequency.day) isMatch = true;
-    }
-    else if (frequency.type === 'monthly') {
-      const lastDayOfMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
-      const targetDay = Math.min(frequency.day, lastDayOfMonth);
-      if (current.getDate() === targetDay) isMatch = true;
-    }
-    else if (frequency.type === 'yearly') {
-      if (current.getMonth() === frequency.month && current.getDate() === frequency.day) {
-        isMatch = true;
-      }
-      // Gestion du 29 février (année non bissextile)
-      if (frequency.month === 1 && frequency.day === 29 && current.getMonth() === 1 && current.getDate() === 28) {
-        const nextYear = new Date(current.getFullYear(), 2, 0);
-        if (nextYear.getDate() !== 29) isMatch = true;
-      }
-    }
-
-    if (isMatch) {
-      const y = current.getFullYear();
-      const m = String(current.getMonth() + 1).padStart(2, '0');
-      const d = String(current.getDate()).padStart(2, '0');
-      occurrences.push(`${y}-${m}-${d}`);
-    }
-
-    current.setDate(current.getDate() + 1);
-  }
-
-  return occurrences;
-}
-
-async function checkRecurrences() {
-  const now = new Date();
-  const nowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-  if (!db.last_opened) {
-    await window.tabula.updateLastOpened(nowStr);
-    db.last_opened = nowStr;
-    return;
-  }
-
-  if (db.last_opened === nowStr) return;
-
-  let newPending = [...(db.pending_recurrences || [])];
-
-  db.recurrences.forEach(rec => {
-    const dates = getOccurrencesBetween(db.last_opened, nowStr, rec.frequency);
-
-    dates.forEach(dateStr => {
-      const alreadyPending = newPending.some(p => p.recurrence_id === rec.id && p.date === dateStr);
-
-      if (!alreadyPending) {
-        newPending.push({
-          id: 'pend_' + crypto.randomUUID(),
-          recurrence_id: rec.id,
-          date: dateStr,
-          type: rec.type,
-          amount_cents: rec.amount_cents,
-          account_id: rec.account_id,
-          to_account_id: rec.to_account_id || null,
-          category_id: rec.category_id || null,
-          payee: rec.payee || '',
-          note: rec.note || ''
-        });
-      }
-    });
-  });
-
-  if (newPending.length > (db.pending_recurrences || []).length) {
-    db.pending_recurrences = newPending;
-    await window.tabula.updatePendingRecurrences(newPending);
-  }
-
-  await window.tabula.updateLastOpened(nowStr);
-  db.last_opened = nowStr;
-}
+// Utilitaires
 
 function formatMoney(cents) {
   return new Intl.NumberFormat('fr-FR', {
@@ -122,19 +39,19 @@ function formatMoney(cents) {
   }).format(cents / 100);
 }
 
-function formatDate(isoDate) {
-  if (!isoDate) return '--/--/----';
-  const [year, month, day] = isoDate.split('-');
-  return `${day}/${month}/${year}`;
-}
-
 function escapeHtml(value) {
-  return String(value ?? '')
+  return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function formatDate(isoDate) {
+  if (!isoDate) return '--/--/----';
+  const [year, month, day] = isoDate.split('-');
+  return `${day}/${month}/${year}`;
 }
 
 function normalizeSearchText(str) {
@@ -292,6 +209,653 @@ function selectDropdownValue(selector, value) {
   }
 }
 
+function populateSelect(selectId, min, max, defaultValue) {
+  const selectEl = document.getElementById(selectId);
+  const menuEl = selectEl.querySelector('.select-menu');
+  const labelEl = selectEl.querySelector('.select-label');
+
+  menuEl.innerHTML = '';
+  for (let i = min; i <= max; i++) {
+    const isSelected = i === defaultValue;
+    if (isSelected) labelEl.innerText = i;
+    menuEl.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${i}">${i}</div>`;
+  }
+}
+
+const MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+
+function populateMonthSelect(selectId, defaultValue) {
+  const selectEl = document.getElementById(selectId);
+  const menuEl = selectEl.querySelector('.select-menu');
+  const labelEl = selectEl.querySelector('.select-label');
+
+  menuEl.innerHTML = '';
+  MONTHS_FR.forEach((month, idx) => {
+    const isSelected = idx === defaultValue;
+    if (isSelected) labelEl.innerText = month;
+    menuEl.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${idx}">${month}</div>`;
+  });
+}
+
+
+// Récurrences
+
+function getOccurrencesBetween(startDateStr, endDateStr, frequency) {
+  const occurrences = [];
+  const start = new Date(startDateStr + 'T12:00:00');
+  const end = new Date(endDateStr + 'T12:00:00');
+
+  if (isNaN(start) || isNaN(end) || start >= end) return occurrences;
+
+  let current = new Date(start);
+  current.setDate(current.getDate() + 1);
+
+  while (current <= end) {
+    let isMatch = false;
+
+    if (frequency.type === 'weekly') {
+      if (current.getDay() === frequency.day) isMatch = true;
+    }
+    else if (frequency.type === 'monthly') {
+      const lastDayOfMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate();
+      const targetDay = Math.min(frequency.day, lastDayOfMonth);
+      if (current.getDate() === targetDay) isMatch = true;
+    }
+    else if (frequency.type === 'yearly') {
+      if (current.getMonth() === frequency.month && current.getDate() === frequency.day) {
+        isMatch = true;
+      }
+      if (frequency.month === 1 && frequency.day === 29 && current.getMonth() === 1 && current.getDate() === 28) {
+        const nextYear = new Date(current.getFullYear(), 2, 0);
+        if (nextYear.getDate() !== 29) isMatch = true;
+      }
+    }
+
+    if (isMatch) {
+      const y = current.getFullYear();
+      const m = String(current.getMonth() + 1).padStart(2, '0');
+      const d = String(current.getDate()).padStart(2, '0');
+      occurrences.push(`${y}-${m}-${d}`);
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return occurrences;
+}
+
+async function checkRecurrences() {
+  const now = new Date();
+  const nowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  if (!db.last_opened) {
+    await window.tabula.updateLastOpened(nowStr);
+    db.last_opened = nowStr;
+    return;
+  }
+
+  if (db.last_opened === nowStr) return;
+
+  let newPending = [...(db.pending_recurrences || [])];
+
+  db.recurrences.forEach(rec => {
+    const dates = getOccurrencesBetween(db.last_opened, nowStr, rec.frequency);
+
+    dates.forEach(dateStr => {
+      const alreadyPending = newPending.some(p => p.recurrence_id === rec.id && p.date === dateStr);
+
+      if (!alreadyPending) {
+        newPending.push({
+          id: 'pend_' + crypto.randomUUID(),
+          recurrence_id: rec.id,
+          date: dateStr,
+          type: rec.type,
+          amount_cents: rec.amount_cents,
+          account_id: rec.account_id,
+          to_account_id: rec.to_account_id || null,
+          category_id: rec.category_id || null,
+          payee: rec.payee || '',
+          note: rec.note || ''
+        });
+      }
+    });
+  });
+
+  if (newPending.length > (db.pending_recurrences || []).length) {
+    db.pending_recurrences = newPending;
+    await window.tabula.updatePendingRecurrences(newPending);
+  }
+
+  await window.tabula.updateLastOpened(nowStr);
+  db.last_opened = nowStr;
+}
+
+function renderPendingRecurrences() {
+  const panel = document.getElementById('recurrences-panel');
+  const list = document.getElementById('recurrences-list');
+  const countText = document.getElementById('recurrences-count-text');
+
+  const pending = db.pending_recurrences || [];
+
+  if (pending.length === 0) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'flex';
+
+  const titleEl = panel.querySelector('.summary-text h3');
+  const iconEl = panel.querySelector('.recurrences-summary .icon-illu');
+  const footerEl = panel.querySelector('.recurrences-footer');
+
+  if (pending.length === 1) {
+    panel.classList.add('mode-single');
+    titleEl.innerText = "Opération à valider";
+    countText.innerText = "1 suggestion de récurrence à confirmer.";
+    if (iconEl) iconEl.style.display = 'none';
+    if (footerEl) footerEl.style.display = 'none';
+  } else {
+    panel.classList.remove('mode-single');
+    titleEl.innerText = "Opérations à valider";
+    countText.innerText = `${pending.length} suggestions de récurrences à confirmer.`;
+    if (iconEl) iconEl.style.display = 'block';
+    if (footerEl) footerEl.style.display = 'flex';
+  }
+
+  list.innerHTML = '';
+
+  pending.forEach(item => {
+    const isIncome = item.type === 'income';
+    const sign = isIncome ? '+ ' : '- ';
+    const amountClass = isIncome ? 'positive' : 'negative';
+
+    const row = document.createElement('div');
+    row.className = 'recurrence-row';
+
+    row.innerHTML = `
+      <div class="recurrence-info">
+        <div class="recurrence-title" title="${escapeHtml(item.payee || 'Sans description')}">
+          ${escapeHtml(item.payee || 'Sans description')}
+        </div>
+        <div class="recurrence-meta">${formatDate(item.date)}</div>
+      </div>
+      <div class="recurrence-amount ${amountClass}">
+        ${sign}${formatMoney(item.amount_cents)}
+      </div>
+      <div class="recurrence-buttons">
+        <button type="button" class="btn btn-square btn-ignore-single" title="Ignorer">
+          <svg class="icon"><use href="icons.svg#icon-close"></use></svg>
+        </button>
+        <button type="button" class="btn btn-square btn-validate-single" title="Valider">
+          <svg class="icon"><use href="icons.svg#icon-check"></use></svg>
+        </button>
+      </div>
+    `;
+
+    row.querySelector('.btn-ignore-single').addEventListener('click', async () => {
+      db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
+
+      await window.tabula.updatePendingRecurrences(db.pending_recurrences);
+
+      renderPendingRecurrences();
+    });
+
+    row.querySelector('.btn-validate-single').addEventListener('click', async () => {
+      const newTx = { ...item };
+      delete newTx.recurrence_id;
+
+      const saved = await window.tabula.addTransaction(newTx);
+
+      db.transactions.unshift(saved);
+
+      db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
+
+      await window.tabula.updatePendingRecurrences(db.pending_recurrences);
+
+      renderPendingRecurrences();
+      renderTransactions();
+      updateBalanceCarouselValues();
+    });
+
+    list.appendChild(row);
+  });
+
+  if (pending.length > 1) {
+    document.getElementById('btn-ignore-all').onclick = async () => {
+      db.pending_recurrences = [];
+      await window.tabula.updatePendingRecurrences([]);
+      renderPendingRecurrences();
+    };
+
+    document.getElementById('btn-validate-all').onclick = async () => {
+      for (const item of pending) {
+        const newTx = { ...item };
+        delete newTx.recurrence_id;
+
+        const saved = await window.tabula.addTransaction(newTx);
+        db.transactions.unshift(saved);
+      }
+
+      db.pending_recurrences = [];
+      await window.tabula.updatePendingRecurrences([]);
+
+      renderPendingRecurrences();
+      renderTransactions();
+      updateBalanceCarouselValues();
+    };
+  }
+}
+
+
+// Thème
+
+let savedTheme = localStorage.getItem('tabula-theme') || 'system';
+
+let tempTheme = savedTheme;
+
+function applyVisualTheme(theme) {
+  if (theme === 'system') {
+    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+    document.body.classList.toggle('light-mode', prefersLight);
+  } else if (theme === 'light') {
+    document.body.classList.add('light-mode');
+  } else {
+    document.body.classList.remove('light-mode');
+  }
+}
+
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
+  const active = settingsModal.classList.contains('active') ? tempTheme : savedTheme;
+  if (active === 'system') {
+    document.body.classList.toggle('light-mode', e.matches);
+  }
+});
+
+
+// Données & soldes
+
+function calculateBalances() {
+  const accountBalances = {};
+  db.accounts.forEach(acc => { accountBalances[acc.id] = acc.initial_balance_cents || 0; });
+
+  db.transactions.forEach(tx => {
+    if (tx.type === 'income') {
+      accountBalances[tx.account_id] = (accountBalances[tx.account_id] || 0) + tx.amount_cents;
+    } else if (tx.type === 'expense') {
+      accountBalances[tx.account_id] = (accountBalances[tx.account_id] || 0) - tx.amount_cents;
+    } else if (tx.type === 'transfer') {
+      accountBalances[tx.account_id] = (accountBalances[tx.account_id] || 0) - tx.amount_cents;
+      if (tx.to_account_id) {
+        accountBalances[tx.to_account_id] = (accountBalances[tx.to_account_id] || 0) + tx.amount_cents;
+      }
+    }
+  });
+
+  return {
+    total: Object.values(accountBalances).reduce((sum, val) => sum + val, 0),
+    byAccount: accountBalances
+  };
+}
+
+
+// Carrousel des soldes
+
+const CAROUSEL_STABLE_MS = 3000;
+
+const CAROUSEL_ANIM_MS = 2000;
+
+const CAROUSEL_EASING = 'cubic-bezier(0.65, 0, 0.15, 1)';
+
+const SNAP_ANIM_MS = 800;
+
+const SNAP_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)';
+
+const SNAP_THRESHOLD = 30;
+
+let currentSlide = 1;
+
+let autoRotateTimer = null;
+
+let snapTimeout = null;
+
+let isAutoRotating = true;
+
+let totalRealSlides = 0;
+
+function renderBalanceCarousel() {
+  const track = document.getElementById('carousel-track');
+  const dotsContainer = document.getElementById('carousel-dots');
+  const balances = calculateBalances();
+
+  const slidesData = [
+    { title: "Solde total", balance: balances.total },
+    ...db.accounts.map(acc => ({
+      title: `Compte • ${escapeHtml(acc.name)}`,
+      balance: balances.byAccount[acc.id] || 0
+    }))
+  ];
+
+  totalRealSlides = slidesData.length;
+
+  if (totalRealSlides <= 1) {
+    currentSlide = 0;
+    track.innerHTML = createSlideHTML(slidesData[0]);
+    dotsContainer.innerHTML = '';
+    return;
+  }
+
+  const renderData = [
+    slidesData[totalRealSlides - 1],
+    ...slidesData,
+    slidesData[0]
+  ];
+
+  track.innerHTML = renderData.map(s => createSlideHTML(s)).join('');
+
+  dotsContainer.innerHTML = '';
+  slidesData.forEach((slide, idx) => {
+    const dot = document.createElement('button');
+    dot.className = `carousel-dot ${idx === 0 ? 'active' : ''}`;
+    dot.title = slide.title;
+    dot.addEventListener('click', () => goToSlide(idx + 1, true));
+    dotsContainer.appendChild(dot);
+  });
+
+  currentSlide = 1;
+  updateTrackPosition(false);
+
+  clearTimeout(autoRotateTimer);
+  clearTimeout(snapTimeout);
+  if (isAutoRotating) {
+    scheduleNextRotation();
+  }
+
+  setupCarouselSwipe(track);
+}
+
+function updateBalanceCarouselValues() {
+  const track = document.getElementById('carousel-track');
+  if (!track || !track.children.length) {
+    renderBalanceCarousel();
+    return;
+  }
+
+  const balances = calculateBalances();
+  const slidesData = [
+    { title: "Solde total", balance: balances.total },
+    ...db.accounts.map(acc => ({
+      title: `Compte • ${escapeHtml(acc.name)}`,
+      balance: balances.byAccount[acc.id] || 0
+    }))
+  ];
+
+  const totalSlides = slidesData.length;
+  if (totalSlides <= 1) return;
+
+  const renderData = [
+    slidesData[totalSlides - 1],
+    ...slidesData,
+    slidesData[0]
+  ];
+
+  Array.from(track.children).forEach((slideEl, idx) => {
+    const slide = renderData[idx];
+    if (!slide) return;
+
+    const formatted = formatMoney(slide.balance).replace(/[\u202F\u00A0]/g, ' ');
+    const [amount, currency] = formatted.split(/\s(?=[^\s]+$)/);
+
+    const amountEl = slideEl.querySelector('.slide-amount');
+    if (amountEl) {
+      amountEl.innerHTML = `${amount} <span class="slide-currency">${currency}</span>`;
+    }
+  });
+}
+
+function createSlideHTML(slide) {
+  const formatted = formatMoney(slide.balance).replace(/[\u202F\u00A0]/g, ' ');
+  const [amount, currency] = formatted.split(/\s(?=[^\s]+$)/);
+  return `
+    <div class="carousel-slide">
+      <span class="slide-label">${slide.title}</span>
+      <div class="slide-amount">
+        ${amount} <span class="slide-currency">${currency}</span>
+      </div>
+    </div>
+  `;
+}
+
+function updateTrackPosition(animate = true, duration = CAROUSEL_ANIM_MS, easing = CAROUSEL_EASING) {
+  const track = document.getElementById('carousel-track');
+  const dots = document.querySelectorAll('.carousel-dot');
+
+  if (track) {
+    track.style.transition = animate ? `transform ${duration}ms ${easing}` : 'none';
+    track.style.transform = `translateX(-${currentSlide * 100}%)`;
+  }
+
+  if (dots.length > 0) {
+    let realIndex = 0;
+    if (currentSlide === 0) {
+      realIndex = totalRealSlides - 1;
+    } else if (currentSlide === totalRealSlides + 1) {
+      realIndex = 0;
+    } else {
+      realIndex = currentSlide - 1;
+    }
+
+    dots.forEach((dot, idx) => {
+      dot.classList.toggle('active', idx === realIndex);
+    });
+  }
+}
+
+function normalizePositionSync() {
+  if (currentSlide === totalRealSlides + 1) {
+    currentSlide = 1;
+    updateTrackPosition(false);
+  } else if (currentSlide === 0) {
+    currentSlide = totalRealSlides;
+    updateTrackPosition(false);
+  }
+}
+
+function goToSlide(index, stopAuto = false) {
+  normalizePositionSync();
+  currentSlide = index;
+  updateTrackPosition(true, SNAP_ANIM_MS, SNAP_EASING);
+
+  if (stopAuto) {
+    clearTimeout(autoRotateTimer);
+    clearTimeout(snapTimeout);
+    autoRotateTimer = null;
+    isAutoRotating = false;
+  }
+}
+
+function scheduleNextRotation() {
+  if (!isAutoRotating || totalRealSlides <= 1) return;
+
+  autoRotateTimer = setTimeout(() => {
+    if (!isAutoRotating) return;
+
+    currentSlide++;
+    updateTrackPosition(true, CAROUSEL_ANIM_MS, CAROUSEL_EASING);
+
+    clearTimeout(snapTimeout);
+    snapTimeout = setTimeout(() => {
+      normalizePositionSync();
+      scheduleNextRotation();
+    }, CAROUSEL_ANIM_MS);
+
+  }, CAROUSEL_STABLE_MS);
+}
+
+function setupCarouselSwipe(track) {
+  const viewport = document.querySelector('.carousel-viewport');
+  let isDragging = false;
+  let startX = 0;
+  let currentDeltaX = 0;
+  let startTranslateX = 0;
+
+  viewport.onmousedown = (e) => {
+    if (e.button !== 0 || totalRealSlides <= 1) return;
+
+    clearTimeout(autoRotateTimer);
+    clearTimeout(snapTimeout);
+    autoRotateTimer = null;
+    isAutoRotating = false;
+
+    normalizePositionSync();
+
+    isDragging = true;
+    startX = e.clientX;
+    currentDeltaX = 0;
+
+    track.style.transition = 'none';
+    startTranslateX = -currentSlide * viewport.clientWidth;
+  };
+
+  window.onmousemove = (e) => {
+    if (!isDragging) return;
+    currentDeltaX = e.clientX - startX;
+    track.style.transform = `translateX(${startTranslateX + currentDeltaX}px)`;
+  };
+
+  window.onmouseup = () => {
+    if (!isDragging) return;
+    isDragging = false;
+
+    if (currentDeltaX < -SNAP_THRESHOLD) {
+      currentSlide++;
+    } else if (currentDeltaX > SNAP_THRESHOLD) {
+      currentSlide--;
+    }
+
+    currentSlide = Math.max(0, Math.min(totalRealSlides + 1, currentSlide));
+
+    updateTrackPosition(true, SNAP_ANIM_MS, SNAP_EASING);
+
+    if (currentSlide === totalRealSlides + 1 || currentSlide === 0) {
+      clearTimeout(snapTimeout);
+      snapTimeout = setTimeout(() => {
+        normalizePositionSync();
+      }, SNAP_ANIM_MS);
+    }
+  };
+}
+
+
+// Auto-complétion des règles
+
+const payeeInput = document.getElementById('op-payee');
+
+const suggestionsMenu = document.getElementById('payee-suggestions');
+
+const suggestionsList = suggestionsMenu.querySelector('.select-menu');
+
+let selectedSuggestionIndex = -1;
+
+payeeInput.addEventListener('input', () => {
+  if (modalMode === 'rule') {
+    suggestionsMenu.style.display = 'none';
+    return;
+  }
+
+  const val = payeeInput.value;
+
+  if (val.startsWith('/') && !val.includes(' ')) {
+    const query = val.substring(1).toLowerCase();
+    const matchingRules = db.rules.filter(r => r.keyword && r.keyword.toLowerCase().startsWith(query));
+
+    suggestionsList.innerHTML = '';
+
+    if (matchingRules.length === 0) {
+      suggestionsList.innerHTML = '<div class="select-option select-no-result">Aucune règle</div>';
+    } else {
+      matchingRules.forEach((rule, idx) => {
+        const option = document.createElement('div');
+        option.className = 'select-option';
+        if (idx === 0) selectedSuggestionIndex = 0;
+        option.innerHTML = `
+          <span class="rule-suggestion-key">/${escapeHtml(rule.keyword)}</span>
+          <span class="rule-suggestion-name">${escapeHtml(rule.name || 'Sans nom')}</span>
+        `;
+        option.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          applyRuleSuggestion(rule);
+        });
+        suggestionsList.appendChild(option);
+      });
+    }
+
+    suggestionsMenu.style.display = 'block';
+  } else {
+    suggestionsMenu.style.display = 'none';
+    selectedSuggestionIndex = -1;
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (e.target !== payeeInput && !suggestionsMenu.contains(e.target)) {
+    suggestionsMenu.style.display = 'none';
+  }
+});
+
+payeeInput.addEventListener('keydown', (e) => {
+  if (modalMode === 'rule') return;
+  if (suggestionsMenu.style.display === 'none') return;
+
+  const options = suggestionsList.querySelectorAll('.select-option:not(.select-no-result)');
+  if (options.length === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectedSuggestionIndex = (selectedSuggestionIndex + 1) % options.length;
+    updateSuggestionFocus(options);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectedSuggestionIndex = (selectedSuggestionIndex - 1 + options.length) % options.length;
+    updateSuggestionFocus(options);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const activeOption = options[selectedSuggestionIndex];
+    if (activeOption) {
+      activeOption.dispatchEvent(new Event('mousedown'));
+    }
+  } else if (e.key === 'Escape') {
+    suggestionsMenu.style.display = 'none';
+  }
+});
+
+function updateSuggestionFocus(options) {
+  options.forEach((opt, idx) => {
+    opt.classList.toggle('selected', idx === selectedSuggestionIndex);
+  });
+}
+
+function applyRuleSuggestion(rule) {
+  setType(rule.type || 'expense');
+
+  if (rule.amount_cents > 0) {
+    document.getElementById('op-amount').value = formatMoneyInput(rule.amount_cents);
+  }
+
+  if (rule.account_id) selectDropdownValue('#op-account', rule.account_id);
+  if (rule.to_account_id) selectDropdownValue('#op-to-account', rule.to_account_id);
+  if (rule.category_id) selectDropdownValue('#op-category', rule.category_id);
+
+  if (rule.note) document.getElementById('op-note').value = rule.note;
+
+  payeeInput.value = rule.payee || '';
+
+  suggestionsMenu.style.display = 'none';
+  payeeInput.focus();
+}
+
+
+// Menus déroulants
+
 function initCustomSelects() {
   document.querySelectorAll('.custom-select').forEach(select => {
     const trigger = select.querySelector('.select-trigger');
@@ -432,383 +996,8 @@ window.addEventListener('click', () => {
   document.querySelectorAll('.custom-select.open').forEach(s => closeCustomSelect(s));
 });
 
-const payeeInput = document.getElementById('op-payee');
-const suggestionsMenu = document.getElementById('payee-suggestions');
-const suggestionsList = suggestionsMenu.querySelector('.select-menu');
-let selectedSuggestionIndex = -1;
 
-payeeInput.addEventListener('input', () => {
-  if (modalMode === 'rule') {
-    suggestionsMenu.style.display = 'none';
-    return;
-  }
-
-  const val = payeeInput.value;
-
-  if (val.startsWith('/') && !val.includes(' ')) {
-    const query = val.substring(1).toLowerCase();
-    const matchingRules = db.rules.filter(r => r.keyword && r.keyword.toLowerCase().startsWith(query));
-
-    suggestionsList.innerHTML = '';
-
-    if (matchingRules.length === 0) {
-      suggestionsList.innerHTML = '<div class="select-option select-no-result">Aucune règle</div>';
-    } else {
-      matchingRules.forEach((rule, idx) => {
-        const option = document.createElement('div');
-        option.className = 'select-option';
-        if (idx === 0) selectedSuggestionIndex = 0;
-        option.innerHTML = `
-          <span class="rule-suggestion-key">/${escapeHtml(rule.keyword)}</span>
-          <span class="rule-suggestion-name">${escapeHtml(rule.name || 'Sans nom')}</span>
-        `;
-        option.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          applyRuleSuggestion(rule);
-        });
-        suggestionsList.appendChild(option);
-      });
-    }
-
-    suggestionsMenu.style.display = 'block';
-  } else {
-    suggestionsMenu.style.display = 'none';
-    selectedSuggestionIndex = -1;
-  }
-});
-
-document.addEventListener('click', (e) => {
-  if (e.target !== payeeInput && !suggestionsMenu.contains(e.target)) {
-    suggestionsMenu.style.display = 'none';
-  }
-});
-
-payeeInput.addEventListener('keydown', (e) => {
-  if (modalMode === 'rule') return;
-  if (suggestionsMenu.style.display === 'none') return;
-
-  const options = suggestionsList.querySelectorAll('.select-option:not(.select-no-result)');
-  if (options.length === 0) return;
-
-  if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    selectedSuggestionIndex = (selectedSuggestionIndex + 1) % options.length;
-    updateSuggestionFocus(options);
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    selectedSuggestionIndex = (selectedSuggestionIndex - 1 + options.length) % options.length;
-    updateSuggestionFocus(options);
-  } else if (e.key === 'Enter') {
-    e.preventDefault();
-    const activeOption = options[selectedSuggestionIndex];
-    if (activeOption) {
-      activeOption.dispatchEvent(new Event('mousedown'));
-    }
-  } else if (e.key === 'Escape') {
-    suggestionsMenu.style.display = 'none';
-  }
-});
-
-function updateSuggestionFocus(options) {
-  options.forEach((opt, idx) => {
-    opt.classList.toggle('selected', idx === selectedSuggestionIndex);
-  });
-}
-
-function applyRuleSuggestion(rule) {
-  setType(rule.type || 'expense');
-
-  if (rule.amount_cents > 0) {
-    document.getElementById('op-amount').value = formatMoneyInput(rule.amount_cents);
-  }
-
-  if (rule.account_id) selectDropdownValue('#op-account', rule.account_id);
-  if (rule.to_account_id) selectDropdownValue('#op-to-account', rule.to_account_id);
-  if (rule.category_id) selectDropdownValue('#op-category', rule.category_id);
-
-  if (rule.note) document.getElementById('op-note').value = rule.note;
-
-  payeeInput.value = rule.payee || '';
-
-  suggestionsMenu.style.display = 'none';
-  payeeInput.focus();
-}
-
-let savedTheme = localStorage.getItem('tabula-theme') || 'system';
-let tempTheme = savedTheme;
-
-function applyVisualTheme(theme) {
-  if (theme === 'system') {
-    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-    document.body.classList.toggle('light-mode', prefersLight);
-  } else if (theme === 'light') {
-    document.body.classList.add('light-mode');
-  } else {
-    document.body.classList.remove('light-mode');
-  }
-}
-
-window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
-  const active = settingsModal.classList.contains('active') ? tempTheme : savedTheme;
-  if (active === 'system') {
-    document.body.classList.toggle('light-mode', e.matches);
-  }
-});
-
-function calculateBalances() {
-  const accountBalances = {};
-  db.accounts.forEach(acc => { accountBalances[acc.id] = acc.initial_balance_cents || 0; });
-
-  db.transactions.forEach(tx => {
-    if (tx.type === 'income') {
-      accountBalances[tx.account_id] = (accountBalances[tx.account_id] || 0) + tx.amount_cents;
-    } else if (tx.type === 'expense') {
-      accountBalances[tx.account_id] = (accountBalances[tx.account_id] || 0) - tx.amount_cents;
-    } else if (tx.type === 'transfer') {
-      accountBalances[tx.account_id] = (accountBalances[tx.account_id] || 0) - tx.amount_cents;
-      if (tx.to_account_id) {
-        accountBalances[tx.to_account_id] = (accountBalances[tx.to_account_id] || 0) + tx.amount_cents;
-      }
-    }
-  });
-
-  return {
-    total: Object.values(accountBalances).reduce((sum, val) => sum + val, 0),
-    byAccount: accountBalances
-  };
-}
-
-const CAROUSEL_STABLE_MS = 3000;
-const CAROUSEL_ANIM_MS = 2000;
-const CAROUSEL_EASING = 'cubic-bezier(0.65, 0, 0.15, 1)';
-const SNAP_ANIM_MS = 800;
-const SNAP_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)';
-const SNAP_THRESHOLD = 30;
-
-let currentSlide = 1;
-let autoRotateTimer = null;
-let snapTimeout = null;
-let isAutoRotating = true;
-let totalRealSlides = 0;
-
-function getCarouselSlidesData() {
-  const balances = calculateBalances();
-  return [
-    { title: 'Solde total', balance: balances.total },
-    ...db.accounts.map(acc => ({
-      title: `Compte • ${acc.name}`,
-      balance: balances.byAccount[acc.id] || 0
-    }))
-  ];
-}
-
-function renderBalanceCarousel() {
-  const track = document.getElementById('carousel-track');
-  const dotsContainer = document.getElementById('carousel-dots');
-  const slidesData = getCarouselSlidesData();
-
-  totalRealSlides = slidesData.length;
-
-  if (totalRealSlides <= 1) {
-    currentSlide = 0;
-    track.innerHTML = createSlideHTML(slidesData[0]);
-    dotsContainer.innerHTML = '';
-    return;
-  }
-
-  const renderData = [
-    slidesData[totalRealSlides - 1],
-    ...slidesData,
-    slidesData[0]
-  ];
-
-  track.innerHTML = renderData.map(s => createSlideHTML(s)).join('');
-
-  dotsContainer.innerHTML = '';
-  slidesData.forEach((slide, idx) => {
-    const dot = document.createElement('button');
-    dot.className = `carousel-dot ${idx === 0 ? 'active' : ''}`;
-    dot.title = slide.title;
-    dot.addEventListener('click', () => goToSlide(idx + 1, true));
-    dotsContainer.appendChild(dot);
-  });
-
-  currentSlide = 1;
-  updateTrackPosition(false);
-
-  clearTimeout(autoRotateTimer);
-  clearTimeout(snapTimeout);
-  if (isAutoRotating) {
-    scheduleNextRotation();
-  }
-
-  setupCarouselSwipe(track);
-}
-
-function updateBalanceCarouselValues() {
-  const track = document.getElementById('carousel-track');
-  if (!track || !track.children.length) {
-    renderBalanceCarousel();
-    return;
-  }
-
-  const slidesData = getCarouselSlidesData();
-
-  const totalSlides = slidesData.length;
-  if (totalSlides <= 1) return;
-
-  const renderData = [
-    slidesData[totalSlides - 1],
-    ...slidesData,
-    slidesData[0]
-  ];
-
-  Array.from(track.children).forEach((slideEl, idx) => {
-    const slide = renderData[idx];
-    if (!slide) return;
-
-    const amountEl = slideEl.querySelector('.slide-amount');
-    if (amountEl) {
-      amountEl.innerHTML = formatSlideAmount(slide.balance);
-    }
-  });
-}
-
-function formatSlideAmount(cents) {
-  const [amount, currency] = formatMoney(cents).replace(/[\u202F\u00A0]/g, ' ').split(/\s(?=[^\s]+$)/);
-  return `${amount} <span class="slide-currency">${currency}</span>`;
-}
-
-function createSlideHTML(slide) {
-  return `
-    <div class="carousel-slide">
-      <span class="slide-label">${escapeHtml(slide.title)}</span>
-      <div class="slide-amount">
-        ${formatSlideAmount(slide.balance)}
-      </div>
-    </div>
-  `;
-}
-
-function updateTrackPosition(animate = true, duration = CAROUSEL_ANIM_MS, easing = CAROUSEL_EASING) {
-  const track = document.getElementById('carousel-track');
-  const dots = document.querySelectorAll('.carousel-dot');
-
-  if (track) {
-    track.style.transition = animate ? `transform ${duration}ms ${easing}` : 'none';
-    track.style.transform = `translateX(-${currentSlide * 100}%)`;
-  }
-
-  if (dots.length > 0) {
-    let realIndex = 0;
-    if (currentSlide === 0) {
-      realIndex = totalRealSlides - 1;
-    } else if (currentSlide === totalRealSlides + 1) {
-      realIndex = 0;
-    } else {
-      realIndex = currentSlide - 1;
-    }
-
-    dots.forEach((dot, idx) => {
-      dot.classList.toggle('active', idx === realIndex);
-    });
-  }
-}
-
-function normalizePositionSync() {
-  if (currentSlide === totalRealSlides + 1) {
-    currentSlide = 1;
-    updateTrackPosition(false);
-  } else if (currentSlide === 0) {
-    currentSlide = totalRealSlides;
-    updateTrackPosition(false);
-  }
-}
-
-function goToSlide(index, stopAuto = false) {
-  normalizePositionSync();
-  currentSlide = index;
-  updateTrackPosition(true, SNAP_ANIM_MS, SNAP_EASING);
-
-  if (stopAuto) {
-    clearTimeout(autoRotateTimer);
-    clearTimeout(snapTimeout);
-    autoRotateTimer = null;
-    isAutoRotating = false;
-  }
-}
-
-function scheduleNextRotation() {
-  if (!isAutoRotating || totalRealSlides <= 1) return;
-
-  autoRotateTimer = setTimeout(() => {
-    if (!isAutoRotating) return;
-
-    currentSlide++;
-    updateTrackPosition(true, CAROUSEL_ANIM_MS, CAROUSEL_EASING);
-
-    clearTimeout(snapTimeout);
-    snapTimeout = setTimeout(() => {
-      normalizePositionSync();
-      scheduleNextRotation();
-    }, CAROUSEL_ANIM_MS);
-
-  }, CAROUSEL_STABLE_MS);
-}
-
-function setupCarouselSwipe(track) {
-  const viewport = document.querySelector('.carousel-viewport');
-  let isDragging = false;
-  let startX = 0;
-  let currentDeltaX = 0;
-  let startTranslateX = 0;
-
-  viewport.onmousedown = (e) => {
-    if (e.button !== 0 || totalRealSlides <= 1) return;
-
-    clearTimeout(autoRotateTimer);
-    clearTimeout(snapTimeout);
-    autoRotateTimer = null;
-    isAutoRotating = false;
-
-    normalizePositionSync();
-
-    isDragging = true;
-    startX = e.clientX;
-    currentDeltaX = 0;
-
-    track.style.transition = 'none';
-    startTranslateX = -currentSlide * viewport.clientWidth;
-  };
-
-  window.onmousemove = (e) => {
-    if (!isDragging) return;
-    currentDeltaX = e.clientX - startX;
-    track.style.transform = `translateX(${startTranslateX + currentDeltaX}px)`;
-  };
-
-  window.onmouseup = () => {
-    if (!isDragging) return;
-    isDragging = false;
-
-    if (currentDeltaX < -SNAP_THRESHOLD) {
-      currentSlide++;
-    } else if (currentDeltaX > SNAP_THRESHOLD) {
-      currentSlide--;
-    }
-
-    currentSlide = Math.max(0, Math.min(totalRealSlides + 1, currentSlide));
-
-    updateTrackPosition(true, SNAP_ANIM_MS, SNAP_EASING);
-
-    if (currentSlide === totalRealSlides + 1 || currentSlide === 0) {
-      clearTimeout(snapTimeout);
-      snapTimeout = setTimeout(() => {
-        normalizePositionSync();
-      }, SNAP_ANIM_MS);
-    }
-  };
-}
+// Tableau des opérations
 
 document.getElementById('search-input').addEventListener('input', (e) => {
   searchQuery = e.target.value.trim();
@@ -902,15 +1091,15 @@ function renderTransactions() {
     }
 
     const hasNote = tx.note && tx.note.trim() !== '';
-    const noteContent = hasNote ? escapeHtml(tx.note) : 'Aucun commentaire';
+    const noteContent = hasNote ? tx.note : 'Aucun commentaire';
     const noteClass = hasNote ? 'note-text' : 'note-text empty-note';
 
     tr.innerHTML = `
       <td class="font-mono text-muted">${formatDate(tx.date)}</td>
       <td>
         <div class="cell-description">
-          <span class="truncate-text desc-text">${escapeHtml(tx.payee) || '-'}</span>
-          <span class="${noteClass}">${noteContent}</span>
+          <span class="truncate-text desc-text">${escapeHtml(tx.payee || '-')}</span>
+          <span class="${noteClass}">${escapeHtml(noteContent)}</span>
         </div>
       </td>
       <td class="text-muted"><span>${escapeHtml(categoryDisplay)}</span></td>
@@ -936,121 +1125,8 @@ document.getElementById('load-more-btn').addEventListener('click', () => {
   renderTransactions();
 });
 
-function renderPendingRecurrences() {
-  const panel = document.getElementById('recurrences-panel');
-  const list = document.getElementById('recurrences-list');
-  const countText = document.getElementById('recurrences-count-text');
 
-  const pending = db.pending_recurrences || [];
-
-  if (pending.length === 0) {
-    panel.style.display = 'none';
-    return;
-  }
-
-  panel.style.display = 'flex';
-
-  const titleEl = panel.querySelector('.summary-text h3');
-  const iconEl = panel.querySelector('.recurrences-summary .icon-illu');
-  const footerEl = panel.querySelector('.recurrences-footer');
-
-  if (pending.length === 1) {
-    panel.classList.add('mode-single');
-    titleEl.innerText = "Opération à valider";
-    countText.innerText = "1 suggestion de récurrence à confirmer.";
-    if (iconEl) iconEl.style.display = 'none';
-    if (footerEl) footerEl.style.display = 'none';
-  } else {
-    panel.classList.remove('mode-single');
-    titleEl.innerText = "Opérations à valider";
-    countText.innerText = `${pending.length} suggestions de récurrences à confirmer.`;
-    if (iconEl) iconEl.style.display = 'block';
-    if (footerEl) footerEl.style.display = 'flex';
-  }
-
-  list.innerHTML = '';
-
-  pending.forEach(item => {
-    const isIncome = item.type === 'income';
-    const sign = isIncome ? '+ ' : '- ';
-    const amountClass = isIncome ? 'positive' : 'negative';
-
-    const row = document.createElement('div');
-    row.className = 'recurrence-row';
-
-    row.innerHTML = `
-      <div class="recurrence-info">
-        <div class="recurrence-title" title="${escapeHtml(item.payee || 'Sans description')}">
-          ${escapeHtml(item.payee || 'Sans description')}
-        </div>
-        <div class="recurrence-meta">${formatDate(item.date)}</div>
-      </div>
-      <div class="recurrence-amount ${amountClass}">
-        ${sign}${formatMoney(item.amount_cents)}
-      </div>
-      <div class="recurrence-buttons">
-        <button type="button" class="btn btn-square btn-ignore-single" title="Ignorer">
-          <svg class="icon"><use href="icons.svg#icon-close"></use></svg>
-        </button>
-        <button type="button" class="btn btn-square btn-validate-single" title="Valider">
-          <svg class="icon"><use href="icons.svg#icon-check"></use></svg>
-        </button>
-      </div>
-    `;
-
-    row.querySelector('.btn-ignore-single').addEventListener('click', async () => {
-      db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
-
-      await window.tabula.updatePendingRecurrences(db.pending_recurrences);
-
-      renderPendingRecurrences();
-    });
-
-    row.querySelector('.btn-validate-single').addEventListener('click', async () => {
-      const newTx = { ...item };
-      delete newTx.recurrence_id;
-
-      const saved = await window.tabula.addTransaction(newTx);
-
-      db.transactions.unshift(saved);
-
-      db.pending_recurrences = db.pending_recurrences.filter(p => p.id !== item.id);
-
-      await window.tabula.updatePendingRecurrences(db.pending_recurrences);
-
-      renderPendingRecurrences();
-      renderTransactions();
-      updateBalanceCarouselValues();
-    });
-
-    list.appendChild(row);
-  });
-
-  if (pending.length > 1) {
-    document.getElementById('btn-ignore-all').onclick = async () => {
-      db.pending_recurrences = [];
-      await window.tabula.updatePendingRecurrences([]);
-      renderPendingRecurrences();
-    };
-
-    document.getElementById('btn-validate-all').onclick = async () => {
-      for (const item of pending) {
-        const newTx = { ...item };
-        delete newTx.recurrence_id;
-
-        const saved = await window.tabula.addTransaction(newTx);
-        db.transactions.unshift(saved);
-      }
-
-      db.pending_recurrences = [];
-      await window.tabula.updatePendingRecurrences([]);
-
-      renderPendingRecurrences();
-      renderTransactions();
-      updateBalanceCarouselValues();
-    };
-  }
-}
+// Menu contextuel
 
 const contextMenu = document.getElementById('row-context-menu');
 
@@ -1091,42 +1167,45 @@ contextMenu.querySelector('.action-delete').addEventListener('click', () => {
 
 window.addEventListener('click', closeContextMenu);
 
+
+// Modale d'opération
+
 const opModal = document.getElementById('operation-modal');
+
 const opForm = document.getElementById('operation-form');
+
 const modalTitle = opModal.querySelector('h2');
+
 const modalSubmitBtn = document.getElementById('save-op-btn');
 
-function openOperationModal({ title, submitText, date = '', dateEnabled = true,
-  dateLabel = 'Date', amount = '', amountLabel = 'Montant', payeeHint = true,
-  payee = '', note = '' }) {
-  modalTitle.innerText = title;
-  modalSubmitBtn.innerText = submitText;
-
-  document.querySelector('#group-payee label').innerHTML = payeeHint
-    ? 'Description <span class="label-hint">(tapez / pour les règles)</span>'
-    : 'Description';
-
-  opModal.classList.add('active');
-  document.getElementById('payee-suggestions').style.display = 'none';
-
-  const dateInput = document.getElementById('op-date');
-  dateInput.disabled = !dateEnabled;
-  dateInput.value = date;
-  dateInput.parentElement.querySelector('label').innerHTML = dateLabel;
-
-  const amountInput = document.getElementById('op-amount');
-  amountInput.value = amount;
-  amountInput.parentElement.parentElement.querySelector('label').innerHTML = amountLabel;
-}
+const opAmountInput = document.getElementById('op-amount');
+opAmountInput.addEventListener('keydown', (e) => {
+  if (e.key !== '/') return;
+  e.preventDefault();
+  opAmountInput.value = '';
+  payeeInput.focus();
+  payeeInput.value = '/';
+  payeeInput.dispatchEvent(new Event('input'));
+});
 
 function openCreateModal() {
+  if (document.getElementById('payee-suggestions')) document.getElementById('payee-suggestions').style.display = 'none';
+
   modalMode = 'create';
   editingTransactionId = null;
-  openOperationModal({
-    title: 'Nouvelle opération',
-    submitText: 'Enregistrer',
-    date: new Date().toISOString().split('T')[0]
-  });
+  modalTitle.innerText = "Nouvelle opération";
+  modalSubmitBtn.innerText = "Enregistrer";
+
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>'
+
+  opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
+  document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('op-amount').value = '';
+  document.getElementById('op-payee').value = '';
+  document.getElementById('op-note').value = '';
 
   setupMoneyInput(document.getElementById('op-amount'), {
     allowNegative: false,
@@ -1137,19 +1216,25 @@ function openCreateModal() {
   setType('expense');
   populateModalDropdowns();
   setTimeout(() => document.getElementById('op-amount').focus(), 50);
+
 }
 
 function openEditModal(tx) {
   modalMode = 'edit';
   editingTransactionId = tx.id;
-  openOperationModal({
-    title: "Modifier l'opération",
-    submitText: 'Mettre à jour',
-    date: tx.date,
-    amount: (tx.amount_cents / 100).toFixed(2).replace('.', ','),
-    payee: tx.payee || '',
-    note: tx.note || ''
-  });
+  modalTitle.innerText = "Modifier l'opération";
+  modalSubmitBtn.innerText = "Mettre à jour";
+
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>'
+
+  opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
+  document.getElementById('op-date').value = tx.date;
+  document.getElementById('op-amount').value = (tx.amount_cents / 100).toFixed(2).replace('.', ',');
+  document.getElementById('op-payee').value = tx.payee || '';
+  document.getElementById('op-note').value = tx.note || '';
 
   setType(tx.type);
   setupDropdown('#op-account', db.accounts, tx.account_id);
@@ -1158,19 +1243,25 @@ function openEditModal(tx) {
   setupMoneyInput(document.getElementById('op-amount'), { allowNegative: false });
 
   setTimeout(() => document.getElementById('op-amount').focus(), 50);
+
 }
 
 function openDuplicateModal(tx) {
   modalMode = 'create';
   editingTransactionId = null;
-  openOperationModal({
-    title: 'Nouvelle opération',
-    submitText: 'Enregistrer',
-    date: new Date().toISOString().split('T')[0],
-    amount: (tx.amount_cents / 100).toFixed(2).replace('.', ','),
-    payee: tx.payee || '',
-    note: tx.note || ''
-  });
+  modalTitle.innerText = "Nouvelle opération";
+  modalSubmitBtn.innerText = "Enregistrer";
+
+  document.querySelector('#group-payee label').innerHTML = 'Description <span class="label-hint">(tapez / pour les règles)</span>'
+
+  opModal.classList.add('active');
+  document.getElementById('op-date').disabled = false;
+  document.getElementById('op-date').parentElement.querySelector('label').innerHTML = "Date";
+  document.getElementById('op-amount').parentElement.parentElement.querySelector('label').innerHTML = "Montant";
+  document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('op-amount').value = (tx.amount_cents / 100).toFixed(2).replace('.', ',');
+  document.getElementById('op-payee').value = tx.payee || '';
+  document.getElementById('op-note').value = tx.note || '';
 
   setType(tx.type);
   setupDropdown('#op-account', db.accounts, tx.account_id);
@@ -1178,54 +1269,45 @@ function openDuplicateModal(tx) {
   setupDropdown('#op-category', db.categories, tx.category_id || db.categories[0]?.id);
 
   setTimeout(() => document.getElementById('op-amount').focus(), 50);
+
 }
 
 function openRecurrenceOpModal(rec, index) {
   modalMode = 'recurrence';
   editingRecurrenceIndex = index;
-  openOperationModal({
-    title: "Configuration de l'opération",
-    submitText: 'Sauvegarder',
-    dateEnabled: false,
-    dateLabel: 'Date <span class="label-hint">(Automatique)</span>',
-    amount: rec.amount_cents > 0 ? formatMoneyInput(rec.amount_cents) : '',
-    payeeHint: false,
-    payee: rec.payee || '',
-    note: rec.note || ''
-  });
+  modalTitle.innerText = "Configuration de l'opération";
+  modalSubmitBtn.innerText = "Sauvegarder";
 
-  setupMoneyInput(document.getElementById('op-amount'), { allowNegative: false, allowEmpty: false });
+  opModal.classList.add('active');
+  const suggestions = document.getElementById('payee-suggestions');
+  if (suggestions) suggestions.style.display = 'none';
+
+  const dateInput = document.getElementById('op-date');
+  const dateLabel = dateInput.parentElement.querySelector('label');
+  dateInput.value = '';
+  dateInput.disabled = true;
+  dateLabel.innerHTML = 'Date <span class="label-hint">(Automatique)</span>';
+
+  const amountInput = document.getElementById('op-amount');
+  const amountLabel = amountInput.parentElement.parentElement.querySelector('label');
+  amountInput.value = rec.amount_cents > 0 ? formatMoneyInput(rec.amount_cents) : '';
+  amountLabel.innerHTML = 'Montant';
+
+  document.querySelector('#group-payee label').innerHTML = 'Description';
+
+  setupMoneyInput(amountInput, { allowNegative: false, allowEmpty: false });
+
+  document.getElementById('op-payee').value = rec.payee || '';
+  document.getElementById('op-note').value = rec.note || '';
   setType(rec.type || 'expense');
+
   setupDropdown('#op-account', db.accounts, rec.account_id || db.accounts[0]?.id);
   setupDropdown('#op-to-account', db.accounts, rec.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
   setupDropdown('#op-category', db.categories, rec.category_id || db.categories[0]?.id);
 
-  setTimeout(() => document.getElementById('op-amount').focus(), 50);
+  setTimeout(() => amountInput.focus(), 50);
 }
 
-function openRuleConfigModal(rule, index) {
-  modalMode = 'rule';
-  editingTransactionId = index;
-  openOperationModal({
-    title: "Configuration de l'opération",
-    submitText: 'Sauvegarder',
-    dateEnabled: false,
-    dateLabel: 'Date <span class="label-hint">(Automatique)</span>',
-    amount: rule.amount_cents > 0 ? (rule.amount_cents / 100).toFixed(2).replace('.', ',') : '',
-    amountLabel: 'Montant <span class="label-hint">(Optionnel)</span>',
-    payeeHint: false,
-    payee: rule.payee || '',
-    note: rule.note || ''
-  });
-
-  setupMoneyInput(document.getElementById('op-amount'), { allowNegative: false, allowEmpty: true });
-  setType(rule.type || 'expense');
-  setupDropdown('#op-account', db.accounts, rule.account_id || db.accounts[0]?.id);
-  setupDropdown('#op-to-account', db.accounts, rule.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
-  setupDropdown('#op-category', db.categories, rule.category_id || db.categories[0]?.id);
-
-  setTimeout(() => document.getElementById('op-amount').focus(), 50);
-}
 function closeOpModal() {
   opModal.classList.remove('active');
   const suggestions = document.getElementById('payee-suggestions');
@@ -1234,19 +1316,8 @@ function closeOpModal() {
 }
 
 document.getElementById('open-new-op-btn').addEventListener('click', openCreateModal);
+
 document.getElementById('cancel-modal-btn').addEventListener('click', closeOpModal);
-
-const opAmountInput = document.getElementById('op-amount');
-opAmountInput.addEventListener('keydown', (e) => {
-  if (e.key !== '/' || (modalMode !== 'create' && modalMode !== 'edit')) return;
-  e.preventDefault();
-  opAmountInput.value = '';
-
-  const payeeField = document.getElementById('op-payee');
-  payeeField.focus();
-  payeeField.value = '/';
-  payeeField.dispatchEvent(new Event('input'));
-});
 
 document.querySelectorAll('.type-btn').forEach(btn => {
   btn.addEventListener('click', () => setType(btn.getAttribute('data-type')));
@@ -1292,7 +1363,7 @@ function setupDropdown(selector, items, defaultId) {
       triggerLabel.innerText = item.name;
       container.setAttribute('data-value', item.id);
     }
-    menu.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${item.id}">${item.name}</div>`;
+    menu.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${item.id}">${escapeHtml(item.name)}</div>`;
   });
 }
 
@@ -1362,15 +1433,21 @@ opForm.addEventListener('submit', async (e) => {
   closeOpModal();
 });
 
+
+// Suppression d'une opération
+
 const deleteModal = document.getElementById('delete-modal');
+
 function openDeleteModal(id) {
   deletingTransactionId = id;
   deleteModal.classList.add('active');
 }
+
 document.getElementById('cancel-delete-btn').addEventListener('click', () => {
   deleteModal.classList.remove('active');
   deletingTransactionId = null;
 });
+
 document.getElementById('confirm-delete-btn').addEventListener('click', async () => {
   if (deletingTransactionId) {
     await window.tabula.deleteTransaction(deletingTransactionId);
@@ -1382,14 +1459,23 @@ document.getElementById('confirm-delete-btn').addEventListener('click', async ()
   }
 });
 
+
+// Paramètres
+
 const settingsModal = document.getElementById('settings-modal');
+
 const accountsListEl = document.getElementById('settings-accounts-list');
+
 const categoriesListEl = document.getElementById('settings-categories-list');
+
 const rulesListEl = document.getElementById('settings-rules-list');
+
 const recurrencesListEl = document.getElementById('settings-recurrences-list');
+
 let tempAccounts = [], tempCategories = [], tempRules = [], tempRecurrences = [];
 
 let pendingSettingsDeleteType = null;
+
 let pendingSettingsDeleteIndex = null;
 
 function openSettingsDeleteModal(type, index, item) {
@@ -1458,6 +1544,7 @@ function closeSettingsModal() {
 }
 
 document.getElementById('nav-settings-btn').addEventListener('click', openSettingsModal);
+
 document.getElementById('cancel-settings-btn').addEventListener('click', closeSettingsModal);
 
 document.getElementById('settings-theme-select').addEventListener('change', (e) => {
@@ -1465,19 +1552,20 @@ document.getElementById('settings-theme-select').addEventListener('change', (e) 
   applyVisualTheme(tempTheme);
 });
 
-function validateUniqueNames(listEl, items, inputSelector) {
+function validateAccountsList() {
   let isValid = true;
   const nameCounts = {};
 
-  items.forEach(item => {
-    const clean = item.name.trim().toLowerCase();
+  tempAccounts.forEach(acc => {
+    const clean = acc.name.trim().toLowerCase();
     if (clean) nameCounts[clean] = (nameCounts[clean] || 0) + 1;
   });
 
-  const rows = listEl.querySelectorAll('.settings-row');
-  items.forEach((item, idx) => {
-    const clean = item.name.trim().toLowerCase();
-    const input = rows[idx]?.querySelector(inputSelector);
+  const rows = accountsListEl.querySelectorAll('.settings-row');
+  tempAccounts.forEach((acc, idx) => {
+    const clean = acc.name.trim().toLowerCase();
+    const segment = rows[idx]?.querySelector('.settings-name-segment');
+    const input = rows[idx]?.querySelector('.acc-name-input');
 
     if (clean === '' || nameCounts[clean] > 1) {
       isValid = false;
@@ -1489,12 +1577,29 @@ function validateUniqueNames(listEl, items, inputSelector) {
   return isValid;
 }
 
-function validateAccountsList() {
-  return validateUniqueNames(accountsListEl, tempAccounts, '.acc-name-input');
-}
-
 function validateCategoriesList() {
-  return validateUniqueNames(categoriesListEl, tempCategories, '.cat-name-input');
+  let isValid = true;
+  const nameCounts = {};
+
+  tempCategories.forEach(cat => {
+    const clean = cat.name.trim().toLowerCase();
+    if (clean) nameCounts[clean] = (nameCounts[clean] || 0) + 1;
+  });
+
+  const rows = categoriesListEl.querySelectorAll('.settings-row');
+  tempCategories.forEach((cat, idx) => {
+    const clean = cat.name.trim().toLowerCase();
+    const segment = rows[idx]?.querySelector('.settings-name-segment');
+    const input = rows[idx]?.querySelector('.cat-name-input');
+
+    if (clean === '' || nameCounts[clean] > 1) {
+      isValid = false;
+      flashInputError(rows[idx]);
+      if (input && document.activeElement !== input) input.focus();
+    }
+  });
+
+  return isValid;
 }
 
 function renderSettingsAccounts() {
@@ -1620,6 +1725,200 @@ function renderSettingsRecurrences() {
   setupDragAndDrop(recurrencesListEl, tempRecurrences, renderSettingsRecurrences);
 }
 
+document.getElementById('settings-add-account-btn').addEventListener('click', () => {
+  tempAccounts.push({ id: 'acc_' + crypto.randomUUID(), name: '', initial_balance_cents: 0 });
+  renderSettingsAccounts();
+
+  const lastRow = accountsListEl.querySelector('.settings-row:last-child .acc-name-input');
+  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+});
+
+document.getElementById('settings-add-category-btn').addEventListener('click', () => {
+  tempCategories.push({ id: 'cat_' + crypto.randomUUID(), name: '' });
+  renderSettingsCategories();
+
+  const lastRow = categoriesListEl.querySelector('.settings-row:last-child .cat-name-input');
+  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+});
+
+document.getElementById('settings-add-recurrence-btn').addEventListener('click', () => {
+  tempRecurrences.push({
+    id: 'rec_' + crypto.randomUUID(),
+    name: '',
+    frequency: { type: 'monthly', day: 1 },
+    type: 'expense',
+    amount_cents: 0,
+    account_id: '',
+    category_id: '',
+    payee: '',
+    note: ''
+  });
+  renderSettingsRecurrences();
+
+  const lastRow = recurrencesListEl.querySelector('.settings-row:last-child .rec-name-input');
+  if (lastRow) setTimeout(() => lastRow.focus(), 20);
+});
+
+document.getElementById('save-settings-btn').addEventListener('click', async () => {
+  if (!validateAccountsList() || !validateCategoriesList() || !validateRulesList()) return;
+
+  const finalAccounts = tempAccounts.map(a => ({ ...a, name: a.name.trim() }));
+  const finalCategories = tempCategories.map(c => ({ ...c, name: c.name.trim() }));
+
+  if (tempDataPath && tempDataPath !== savedDataPath) {
+    await window.tabula.setDataPath(tempDataPath);
+    savedDataPath = tempDataPath;
+  }
+
+  await window.tabula.updateAccounts(finalAccounts);
+  await window.tabula.updateCategories(finalCategories);
+  await window.tabula.updateRules(tempRules);
+  await window.tabula.updateRecurrences(tempRecurrences);
+
+  savedTheme = tempTheme;
+  localStorage.setItem('tabula-theme', savedTheme);
+
+  await loadApp();
+  settingsModal.classList.remove('active');
+});
+
+document.querySelectorAll('.settings-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const currentActivePane = document.querySelector('.settings-pane.active');
+
+    if (currentActivePane?.id === 'tab-accounts' && !validateAccountsList()) return;
+    if (currentActivePane?.id === 'tab-categories' && !validateCategoriesList()) return;
+    if (currentActivePane?.id === 'tab-rules' && !validateRulesList()) return;
+
+    const externalUrl = tab.getAttribute('data-url');
+    if (externalUrl) {
+      if (window.tabula.openExternal) window.tabula.openExternal(externalUrl);
+      return;
+    }
+
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
+
+    tab.classList.add('active');
+    document.getElementById(tab.getAttribute('data-target')).classList.add('active');
+  });
+});
+
+
+// Modale de fréquence
+
+const freqModal = document.getElementById('freq-modal');
+
+const freqTypeSelect = document.getElementById('freq-type-select');
+
+const freqDayOfWeekSelect = document.getElementById('freq-day-of-week');
+
+function openFreqModal(rec, index) {
+  editingRecurrenceIndex = index;
+
+  const freq = rec.frequency || { type: 'monthly', day: 1 };
+
+  populateSelect('freq-day-of-month', 1, 31, freq.day || 1);
+  populateSelect('freq-day-of-year', 1, 31, freq.day || 1);
+  populateMonthSelect('freq-month-of-year', freq.month || 0);
+
+  initCustomSelects();
+
+  const typeOption = freqTypeSelect.querySelector(`.select-option[data-value="${freq.type}"]`);
+  if (typeOption) selectOption(freqTypeSelect, typeOption);
+
+  if (freq.type === 'yearly') {
+    const dayOpt = document.getElementById('freq-day-of-year').querySelector(`.select-option[data-value="${freq.day || 1}"]`);
+    if (dayOpt) selectOption(document.getElementById('freq-day-of-year'), dayOpt);
+    const monthOpt = document.getElementById('freq-month-of-year').querySelector(`.select-option[data-value="${freq.month || 0}"]`);
+    if (monthOpt) selectOption(document.getElementById('freq-month-of-year'), monthOpt);
+  } else if (freq.type === 'weekly') {
+    const dayOption = freqDayOfWeekSelect.querySelector(`.select-option[data-value="${freq.day !== undefined ? freq.day : 1}"]`);
+    if (dayOption) selectOption(freqDayOfWeekSelect, dayOption);
+  } else if (freq.type === 'monthly') {
+    const dayOpt = document.getElementById('freq-day-of-month').querySelector(`.select-option[data-value="${freq.day || 1}"]`);
+    if (dayOpt) selectOption(document.getElementById('freq-day-of-month'), dayOpt);
+  }
+
+  updateFreqFields(freq.type);
+  freqModal.classList.add('active');
+}
+
+function updateFreqFields(type) {
+  document.getElementById('freq-monthly-fields').style.display = type === 'monthly' ? 'flex' : 'none';
+  document.getElementById('freq-yearly-fields').style.display = type === 'yearly' ? 'flex' : 'none';
+  document.getElementById('freq-weekly-fields').style.display = type === 'weekly' ? 'flex' : 'none';
+}
+
+freqTypeSelect.addEventListener('change', (e) => {
+  updateFreqFields(e.detail.value);
+});
+
+document.getElementById('cancel-freq-btn').addEventListener('click', () => {
+  freqModal.classList.remove('active');
+});
+
+document.getElementById('save-freq-btn').addEventListener('click', () => {
+  if (editingRecurrenceIndex === null) return;
+
+  const type = freqTypeSelect.getAttribute('data-value');
+  let frequency = { type };
+
+  if (type === 'monthly') {
+    const day = parseInt(document.getElementById('freq-day-of-month').getAttribute('data-value')) || 1;
+    frequency.day = day;
+  } else if (type === 'yearly') {
+    const day = parseInt(document.getElementById('freq-day-of-year').getAttribute('data-value')) || 1;
+    const month = parseInt(document.getElementById('freq-month-of-year').getAttribute('data-value')) || 0;
+    frequency.day = day;
+    frequency.month = month;
+  } else if (type === 'weekly') {
+    const day = parseInt(freqDayOfWeekSelect.getAttribute('data-value'));
+    frequency.day = day;
+  }
+
+  tempRecurrences[editingRecurrenceIndex].frequency = frequency;
+  renderSettingsRecurrences();
+  freqModal.classList.remove('active');
+});
+
+
+// Règles
+
+function openRuleConfigModal(rule, index) {
+  modalMode = 'rule';
+  editingTransactionId = index;
+  modalTitle.innerText = "Configuration de l'opération";
+  modalSubmitBtn.innerText = "Sauvegarder";
+
+  document.querySelector('#group-payee label').innerHTML = 'Description';
+
+  opModal.classList.add('active');
+
+  const dateInput = document.getElementById('op-date');
+  const dateLabel = dateInput.parentElement.querySelector('label');
+  dateInput.value = '';
+  dateInput.disabled = true;
+  dateLabel.innerHTML = 'Date <span class="label-hint">(Automatique)</span>';
+
+  const amountInput = document.getElementById('op-amount');
+  const amountLabel = amountInput.parentElement.parentElement.querySelector('label');
+  amountInput.value = rule.amount_cents > 0 ? (rule.amount_cents / 100).toFixed(2).replace('.', ',') : '';
+  amountLabel.innerHTML = 'Montant <span class="label-hint">(Optionnel)</span>';
+
+  setupMoneyInput(amountInput, { allowNegative: false, allowEmpty: true });
+
+  document.getElementById('op-payee').value = rule.payee || '';
+  document.getElementById('op-note').value = rule.note || '';
+  setType(rule.type || 'expense');
+
+  setupDropdown('#op-account', db.accounts, rule.account_id || db.accounts[0]?.id);
+  setupDropdown('#op-to-account', db.accounts, rule.to_account_id || db.accounts[1]?.id || db.accounts[0]?.id);
+  setupDropdown('#op-category', db.categories, rule.category_id || db.categories[0]?.id);
+
+  setTimeout(() => amountInput.focus(), 50);
+}
+
 function renderSettingsRules() {
   rulesListEl.innerHTML = '';
   tempRules.forEach((rule, idx) => {
@@ -1739,105 +2038,26 @@ function validateRulesList() {
   return isValid;
 }
 
-const freqModal = document.getElementById('freq-modal');
-const freqTypeSelect = document.getElementById('freq-type-select');
-const freqDayOfWeekSelect = document.getElementById('freq-day-of-week');
-
-function populateSelect(selectId, min, max, defaultValue) {
-  const selectEl = document.getElementById(selectId);
-  const menuEl = selectEl.querySelector('.select-menu');
-  const labelEl = selectEl.querySelector('.select-label');
-
-  menuEl.innerHTML = '';
-  for (let i = min; i <= max; i++) {
-    const isSelected = i === defaultValue;
-    if (isSelected) labelEl.innerText = i;
-    menuEl.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${i}">${i}</div>`;
-  }
-}
-
-const MONTHS_FR = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-function populateMonthSelect(selectId, defaultValue) {
-  const selectEl = document.getElementById(selectId);
-  const menuEl = selectEl.querySelector('.select-menu');
-  const labelEl = selectEl.querySelector('.select-label');
-
-  menuEl.innerHTML = '';
-  MONTHS_FR.forEach((month, idx) => {
-    const isSelected = idx === defaultValue;
-    if (isSelected) labelEl.innerText = month;
-    menuEl.innerHTML += `<div class="select-option ${isSelected ? 'selected' : ''}" data-value="${idx}">${month}</div>`;
+document.getElementById('settings-add-rule-btn').addEventListener('click', () => {
+  tempRules.push({
+    id: 'rule_' + crypto.randomUUID(),
+    name: '',
+    keyword: '',
+    type: 'expense',
+    amount_cents: 0,
+    account_id: '',
+    category_id: '',
+    note: '',
+    payee: ''
   });
-}
+  renderSettingsRules();
 
-function openFreqModal(rec, index) {
-  editingRecurrenceIndex = index;
-
-  const freq = rec.frequency || { type: 'monthly', day: 1 };
-
-  populateSelect('freq-day-of-month', 1, 31, freq.day || 1);
-  populateSelect('freq-day-of-year', 1, 31, freq.day || 1);
-  populateMonthSelect('freq-month-of-year', freq.month || 0);
-
-  initCustomSelects();
-
-  const typeOption = freqTypeSelect.querySelector(`.select-option[data-value="${freq.type}"]`);
-  if (typeOption) selectOption(freqTypeSelect, typeOption);
-
-  if (freq.type === 'yearly') {
-    const dayOpt = document.getElementById('freq-day-of-year').querySelector(`.select-option[data-value="${freq.day || 1}"]`);
-    if (dayOpt) selectOption(document.getElementById('freq-day-of-year'), dayOpt);
-    const monthOpt = document.getElementById('freq-month-of-year').querySelector(`.select-option[data-value="${freq.month || 0}"]`);
-    if (monthOpt) selectOption(document.getElementById('freq-month-of-year'), monthOpt);
-  } else if (freq.type === 'weekly') {
-    const dayOption = freqDayOfWeekSelect.querySelector(`.select-option[data-value="${freq.day !== undefined ? freq.day : 1}"]`);
-    if (dayOption) selectOption(freqDayOfWeekSelect, dayOption);
-  } else if (freq.type === 'monthly') {
-    const dayOpt = document.getElementById('freq-day-of-month').querySelector(`.select-option[data-value="${freq.day || 1}"]`);
-    if (dayOpt) selectOption(document.getElementById('freq-day-of-month'), dayOpt);
-  }
-
-  updateFreqFields(freq.type);
-  freqModal.classList.add('active');
-}
-
-function updateFreqFields(type) {
-  document.getElementById('freq-monthly-fields').style.display = type === 'monthly' ? 'flex' : 'none';
-  document.getElementById('freq-yearly-fields').style.display = type === 'yearly' ? 'flex' : 'none';
-  document.getElementById('freq-weekly-fields').style.display = type === 'weekly' ? 'flex' : 'none';
-}
-
-freqTypeSelect.addEventListener('change', (e) => {
-  updateFreqFields(e.detail.value);
+  const lastRow = rulesListEl.querySelector('.settings-row:last-child .rule-name-input');
+  if (lastRow) setTimeout(() => lastRow.focus(), 20);
 });
 
-document.getElementById('cancel-freq-btn').addEventListener('click', () => {
-  freqModal.classList.remove('active');
-});
 
-document.getElementById('save-freq-btn').addEventListener('click', () => {
-  if (editingRecurrenceIndex === null) return;
-
-  const type = freqTypeSelect.getAttribute('data-value');
-  let frequency = { type };
-
-  if (type === 'monthly') {
-    const day = parseInt(document.getElementById('freq-day-of-month').getAttribute('data-value')) || 1;
-    frequency.day = day;
-  } else if (type === 'yearly') {
-    const day = parseInt(document.getElementById('freq-day-of-year').getAttribute('data-value')) || 1;
-    const month = parseInt(document.getElementById('freq-month-of-year').getAttribute('data-value')) || 0;
-    frequency.day = day;
-    frequency.month = month;
-  } else if (type === 'weekly') {
-    const day = parseInt(freqDayOfWeekSelect.getAttribute('data-value'));
-    frequency.day = day;
-  }
-
-  tempRecurrences[editingRecurrenceIndex].frequency = frequency;
-  renderSettingsRecurrences();
-  freqModal.classList.remove('active');
-});
+// Drag & drop
 
 function setupDragAndDrop(containerEl, dataArray, renderCallback) {
   const rows = containerEl.querySelectorAll('.settings-row');
@@ -2091,105 +2311,11 @@ function setupDragAndDrop(containerEl, dataArray, renderCallback) {
   });
 }
 
-function focusNewRow(listEl, inputSelector) {
-  const input = listEl.querySelector(`.settings-row:last-child ${inputSelector}`);
-  if (input) setTimeout(() => input.focus(), 20);
-}
 
-document.getElementById('settings-add-account-btn').addEventListener('click', () => {
-  tempAccounts.push({ id: 'acc_' + crypto.randomUUID(), name: '', initial_balance_cents: 0 });
-  renderSettingsAccounts();
-
-  focusNewRow(accountsListEl, '.acc-name-input');
-});
-
-document.getElementById('settings-add-category-btn').addEventListener('click', () => {
-  tempCategories.push({ id: 'cat_' + crypto.randomUUID(), name: '' });
-  renderSettingsCategories();
-
-  focusNewRow(categoriesListEl, '.cat-name-input');
-});
-
-document.getElementById('settings-add-recurrence-btn').addEventListener('click', () => {
-  tempRecurrences.push({
-    id: 'rec_' + crypto.randomUUID(),
-    name: '',
-    frequency: { type: 'monthly', day: 1 },
-    type: 'expense',
-    amount_cents: 0,
-    account_id: '',
-    category_id: '',
-    payee: '',
-    note: ''
-  });
-  renderSettingsRecurrences();
-
-  focusNewRow(recurrencesListEl, '.rec-name-input');
-});
-
-document.getElementById('settings-add-rule-btn').addEventListener('click', () => {
-  tempRules.push({
-    id: 'rule_' + crypto.randomUUID(),
-    name: '',
-    keyword: '',
-    type: 'expense',
-    amount_cents: 0,
-    account_id: '',
-    category_id: '',
-    note: '',
-    payee: ''
-  });
-  renderSettingsRules();
-
-  focusNewRow(rulesListEl, '.rule-name-input');
-});
-
-document.getElementById('save-settings-btn').addEventListener('click', async () => {
-  if (!validateAccountsList() || !validateCategoriesList() || !validateRulesList()) return;
-
-  const finalAccounts = tempAccounts.map(a => ({ ...a, name: a.name.trim() }));
-  const finalCategories = tempCategories.map(c => ({ ...c, name: c.name.trim() }));
-
-  if (tempDataPath && tempDataPath !== savedDataPath) {
-    await window.tabula.setDataPath(tempDataPath);
-    savedDataPath = tempDataPath;
-  }
-
-  await window.tabula.updateAccounts(finalAccounts);
-  await window.tabula.updateCategories(finalCategories);
-  await window.tabula.updateRules(tempRules);
-  await window.tabula.updateRecurrences(tempRecurrences);
-
-  savedTheme = tempTheme;
-  localStorage.setItem('tabula-theme', savedTheme);
-
-  await loadApp();
-  settingsModal.classList.remove('active');
-});
-
-document.querySelectorAll('.settings-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    const currentActivePane = document.querySelector('.settings-pane.active');
-
-    if (currentActivePane?.id === 'tab-accounts' && !validateAccountsList()) return;
-    if (currentActivePane?.id === 'tab-categories' && !validateCategoriesList()) return;
-    if (currentActivePane?.id === 'tab-rules' && !validateRulesList()) return;
-
-    const externalUrl = tab.getAttribute('data-url');
-    if (externalUrl) {
-      if (window.tabula.openExternal) window.tabula.openExternal(externalUrl);
-      return;
-    }
-
-    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
-
-    tab.classList.add('active');
-    document.getElementById(tab.getAttribute('data-target')).classList.add('active');
-  });
-});
+// Données (import / export / reset)
 
 const importWarningModal = document.getElementById('import-warning-modal');
+
 const resetWarningModal = document.getElementById('reset-warning-modal');
 
 document.getElementById('btn-export-backup').addEventListener('click', async () => {
@@ -2205,9 +2331,11 @@ document.getElementById('btn-export-backup').addEventListener('click', async () 
 document.getElementById('btn-import-backup').addEventListener('click', () => {
   importWarningModal.classList.add('active');
 });
+
 document.getElementById('cancel-import-warning-btn').addEventListener('click', () => {
   importWarningModal.classList.remove('active');
 });
+
 document.getElementById('confirm-import-warning-btn').addEventListener('click', async () => {
   importWarningModal.classList.remove('active');
   const success = await window.tabula.importBackup();
@@ -2256,6 +2384,13 @@ document.getElementById('confirm-settings-delete-btn').addEventListener('click',
   }
 });
 
+
+// Chemin des données
+
+let savedDataPath = '';
+
+let tempDataPath = '';
+
 async function refreshDataPathDisplay() {
   const inputEl = document.getElementById('db-path-input');
   if (window.tabula.getDataPath) {
@@ -2290,7 +2425,9 @@ async function handleManualPathCommit() {
 }
 
 const dbPathInput = document.getElementById('db-path-input');
+
 dbPathInput?.addEventListener('blur', handleManualPathCommit);
+
 dbPathInput?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -2324,6 +2461,9 @@ document.getElementById('btn-open-folder')?.addEventListener('click', () => {
 document.getElementById('close-incompatible-btn')?.addEventListener('click', () => {
   document.getElementById('incompatible-file-modal')?.classList.remove('active');
 });
+
+
+// Mise à jour
 
 const updateStage = document.getElementById('update-stage');
 
@@ -2373,7 +2513,7 @@ async function runUpdateCheck() {
       <div class="settings-cards-group">
         <div class="settings-card">
           <div class="settings-card-info" style="text-align: left;">
-            <span class="settings-card-title">Tabula v${escapeHtml(res.latestVersion)}</span>
+            <span class="settings-card-title">Tabula v${res.latestVersion}</span>
             <span class="text-muted settings-card-desc">${dateText}</span>
           </div>
           <button type="button" class="btn" id="btn-get-update">Obtenir</button>
@@ -2393,9 +2533,15 @@ async function runUpdateCheck() {
   `;
 }
 
+
+// Divers
+
 const wipModal = document.getElementById('wip-modal');
+
 document.getElementById('nav-analytics-btn').addEventListener('click', () => wipModal.classList.add('active'));
+
 document.getElementById('nav-export-btn').addEventListener('click', () => wipModal.classList.add('active'));
+
 document.getElementById('close-wip-btn').addEventListener('click', () => wipModal.classList.remove('active'));
 
 document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
@@ -2403,10 +2549,10 @@ document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
     if (e.target !== backdrop) return;
 
     if (backdrop.id === 'operation-modal') closeOpModal();
-    else if (backdrop.id !== 'settings-modal') {
-      if (backdrop.id === 'delete-modal') deletingTransactionId = null;
-      backdrop.classList.remove('active');
+    else if (backdrop.id === 'settings-modal') {
     }
+    else if (backdrop.id === 'delete-modal') { backdrop.classList.remove('active'); deletingTransactionId = null; }
+    else backdrop.classList.remove('active');
   });
 });
 
@@ -2519,6 +2665,13 @@ window.addEventListener('wheel', (e) => {
   e.preventDefault();
 }, { passive: false });
 
+document.getElementById('close-missing-file-btn')?.addEventListener('click', () => {
+  document.getElementById('missing-file-modal')?.classList.remove('active');
+});
+
+
+// Initialisation
+
 async function loadApp() {
   db = await window.tabula.getData();
 
@@ -2563,9 +2716,5 @@ async function loadApp() {
   renderTransactions();
   renderPendingRecurrences();
 }
-
-document.getElementById('close-missing-file-btn')?.addEventListener('click', () => {
-  document.getElementById('missing-file-modal')?.classList.remove('active');
-});
 
 loadApp();
