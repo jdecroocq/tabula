@@ -43,15 +43,18 @@
         "nsis",
         "portable"
       ],
-      "icon": "src/main/assets/icon-win.png",
-      "artifactName": "${name}-setup-${version}.${ext}"
+      "icon": "src/main/assets/icon-win.png"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Tabula"
+      "shortcutName": "Tabula",
+      "artifactName": "${name}-setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${name}-portable-${version}.${ext}"
     }
   }
 }
