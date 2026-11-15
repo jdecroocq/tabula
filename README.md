@@ -42,9 +42,9 @@ Les paquets compilés sont disponibles dans la section [Releases](https://github
 
 ### Windows
 
-- **Installateur standard (`Setup.exe`) :**
+- **Installateur standard (`setup`) :**
   Double-cliquez sur le fichier pour installer Tabula et créer les raccourcis Bureau et Menu Démarrer.
-- **Version portable (`.exe`) :**
+- **Version portable (`portable`):**
   Exécutable autonome prêt à l'emploi sans installation (idéal sur clé USB).
 
 ### macOS
