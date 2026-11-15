@@ -76,14 +76,14 @@ function createDefaultData() {
     categories: [
       { id: 'cat_' + crypto.randomUUID(), name: 'Alimentation' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Logement' },
-      { id: 'cat_' + crypto.randomUUID(), name: 'Transports' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Transport' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Santé' },
-      { id: 'cat_' + crypto.randomUUID(), name: 'Loisirs' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Loisir' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Équipement' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Habillement' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Frais bancaires' },
-      { id: 'cat_' + crypto.randomUUID(), name: 'Investissements' },
-      { id: 'cat_' + crypto.randomUUID(), name: 'Revenus de placements' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Investissement' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Assurance' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Salaire' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Impôts et taxes' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Divers' }
