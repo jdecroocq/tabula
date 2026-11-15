@@ -5,9 +5,9 @@ Tabula est une application de bureau personnelle pour suivre ses dépenses et se
 ![Aperçu Tabula - Tableau de bord](assets/sc01.png)
 
 
-## Fonctionnalités
-
 - **Gestion des comptes et catégories :** Création libre de comptes bancaires (avec solde initial) et de catégories personnalisées.
+- **Règles d'automatisation :** Création de commandes de remplissage automatique.
+- **Opérations récurrentes :** Planification de charges fixes (mensuelles, annuelles, hebdomadaires) avec génération des opérations et validation au démarrage.
 - **Recherche en direct :** Filtrage à la frappe sans prise en compte des accents et de la casse ; recherche par description, date, catégorie, compte ou montant.
 - **Carrousel des soldes :** Visualisation du solde global et défilement entre les différents comptes.
 - **Précision monétaire :** Calculs gérés en centimes entiers pour éviter les erreurs d'arrondi.
@@ -19,15 +19,6 @@ Tabula est une application de bureau personnelle pour suivre ses dépenses et se
   <img src="assets/sc02.png" width="49%" alt="Nouvelle opération" />
   <img src="assets/sc03.png" width="49%" alt="Paramètres" />
 </p>
-
-
-## Fonctionnement technique
-
-L'application est développée avec les technologies web standards, sans framework JavaScript :
-
-- **Socle :** [Electron](https://www.electronjs.org/) & [Node.js](https://nodejs.org/)
-- **Interface :** HTML5, CSS3 et JavaScript vanilla (ES6)
-- **Stockage :** Fichier JSON local
 
 
 ## Téléchargement et installation
@@ -58,18 +49,6 @@ Les paquets compilés sont disponibles dans la section [Releases](https://github
 
 ### macOS
 La prise en charge de macOS n'est pas proposée pour le moment.
-
-
-## Évolutions à venir
-
-Le socle est pleinement opérationnel. Les versions mineures suivantes apporteront progressivement :
-
-- Outils d'analyse financière et visualisations graphiques.
-- Module de génération et d'exportation de rapports comptables (PDF, CSV).
-- Planification automatique des opérations récurrentes (abonnements, loyers).
-- Règles d'automatisation et d'auto-complétion à la saisie.
-- Support natif de macOS (`.dmg`).
-
 
 ## Lancer le projet en local
 
