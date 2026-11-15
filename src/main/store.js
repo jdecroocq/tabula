@@ -76,19 +76,20 @@ function createDefaultData() {
     categories: [
       { id: 'cat_' + crypto.randomUUID(), name: 'Alimentation' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Logement' },
-      { id: 'cat_' + crypto.randomUUID(), name: 'Transports' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Transport' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Santé' },
-      { id: 'cat_' + crypto.randomUUID(), name: 'Loisirs' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Loisir' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Équipement' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Habillement' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Frais bancaires' },
-      { id: 'cat_' + crypto.randomUUID(), name: 'Investissements' },
-      { id: 'cat_' + crypto.randomUUID(), name: 'Revenus de placements' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Investissement' },
+      { id: 'cat_' + crypto.randomUUID(), name: 'Assurance' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Salaire' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Impôts et taxes' },
       { id: 'cat_' + crypto.randomUUID(), name: 'Divers' }
     ],
-    transactions: []
+    transactions: [],
+    rules: []
   };
 }
 
@@ -124,7 +125,11 @@ function readData() {
       return initial;
     }
     const raw = fs.readFileSync(currentDataFilePath, 'utf-8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    
+    if (!parsed.rules) parsed.rules = [];
+    
+    return parsed;
   } catch (error) {
     console.error("Erreur de lecture :", error);
     const initial = createDefaultData();
@@ -218,6 +223,33 @@ function updateAccounts(newAccounts) {
   return data.accounts;
 }
 
+function updateRecurrences(newRecurrences) {
+  const data = readData();
+  data.recurrences = newRecurrences;
+  writeData(data);
+  return data.recurrences;
+}
+
+function updatePendingRecurrences(newPending) {
+  const data = readData();
+  data.pending_recurrences = newPending;
+  writeData(data);
+  return data.pending_recurrences;
+}
+
+function updateLastOpened(dateIsoString) {
+  const data = readData();
+  data.last_opened = dateIsoString;
+  writeData(data);
+}
+
+function updateRules(newRules) {
+  const data = readData();
+  data.rules = newRules;
+  writeData(data);
+  return data.rules;
+}
+
 module.exports = {
   init,
   readData,
@@ -231,5 +263,9 @@ module.exports = {
   updateTransaction,
   deleteTransaction,
   updateCategories,
-  updateAccounts
+  updateAccounts,
+  updateRecurrences,
+  updatePendingRecurrences,
+  updateLastOpened,
+  updateRules
 };
