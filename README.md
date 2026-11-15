@@ -5,6 +5,8 @@ Tabula est une application de bureau personnelle pour suivre ses dépenses et se
 ![Aperçu Tabula - Tableau de bord](assets/sc01.png)
 
 
+## Fonctionnalités
+
 - **Gestion des comptes et catégories :** Création libre de comptes bancaires (avec solde initial) et de catégories personnalisées.
 - **Règles d'automatisation :** Création de commandes de remplissage automatique.
 - **Opérations récurrentes :** Planification de charges fixes (mensuelles, annuelles, hebdomadaires) avec génération des opérations et validation au démarrage.
